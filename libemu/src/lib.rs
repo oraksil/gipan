@@ -4,7 +4,6 @@
 #![allow(unused_imports)]
 
 use std::slice;
-use std::time::Instant;
 use libc::*;
 use bytes::Bytes;
 
@@ -26,7 +25,7 @@ pub struct Frame {
 
 pub trait Emulator {
     fn set_frame_info(&mut self, w: i32, h: i32);
-    fn set_frame_callback(&mut self, callback: impl FnMut(&Frame));
+    fn set_frame_callback(&mut self, callback: impl FnMut(Frame));
     fn put_input_event(&self, event: &InputEvent);
     fn run(&self, system_name: &str) -> i32;
 }
@@ -73,15 +72,14 @@ impl Emulator for MameEmulator {
         }
     }
 
-    fn set_frame_callback(&mut self, mut callback: impl FnMut(&Frame)) {
+    fn set_frame_callback(&mut self, mut callback: impl FnMut(Frame)) {
         mame_register_callback(
             self.mame_inst,
             move |raw_frame: mame_frame_t| {
-                let buf = unsafe { slice::from_raw_parts(raw_frame.buffer, raw_frame.buf_size) };
-                let frame = Frame {
-                    image_buf: Bytes::from(buf),
+                let buf = unsafe {
+                    slice::from_raw_parts(raw_frame.buffer, raw_frame.buf_size)
                 };
-                callback(&frame);
+                callback(Frame { image_buf: Bytes::from(buf) });
             }
         );
     }
