@@ -9,14 +9,16 @@ use bytes::Bytes;
 
 include!("./bindings.rs");
 
+#[derive(Debug)]
 pub enum InputKind {
-    INPUT_KEY_UP,
     INPUT_KEY_DOWN,
+    INPUT_KEY_UP,
 }
 
+#[derive(Debug)]
 pub struct InputEvent {
-    value: u8,
-    kind: InputKind,
+    pub value: u8,
+    pub kind: InputKind,
 }
 
 pub struct Frame {
@@ -26,16 +28,19 @@ pub struct Frame {
 pub trait Emulator {
     fn set_frame_info(&mut self, w: i32, h: i32);
     fn set_frame_callback(&mut self, callback: impl FnMut(Frame));
-    fn put_input_event(&self, event: &InputEvent);
+    fn put_input_event(&mut self, event: InputEvent);
     fn run(&self, system_name: &str) -> i32;
 }
 
+#[derive(Clone)]
 pub struct MameEmulator {
     mame_inst: *mut mame_t,
 }
 
+unsafe impl Send for MameEmulator {}
+
 impl MameEmulator {
-    pub fn emulator_instance() -> impl Emulator {
+    pub fn emulator_instance() -> (impl Emulator + Clone) {
         let mame_inst: *mut mame_t = unsafe { get_mame_instance() };
         MameEmulator {
             mame_inst: mame_inst,
@@ -84,8 +89,20 @@ impl Emulator for MameEmulator {
         );
     }
 
-    fn put_input_event(&self, event: &InputEvent) {
-
+    fn put_input_event(&mut self, event: InputEvent) {
+        let mame_input = mame_input_event_t {
+            key: event.value,
+            type_: match event.kind {
+                InputKind::INPUT_KEY_UP => mame_input_enum_t_INPUT_KEY_UP,
+                InputKind::INPUT_KEY_DOWN => mame_input_enum_t_INPUT_KEY_DOWN,
+            }
+        };
+        unsafe {
+            match (*self.mame_inst).enqueue_input_event {
+                Some(f) => f(mame_input),
+                None => panic!("enqueue_input_event is not implemented.")
+            }
+        }
     }
 
     fn run(&self, system_name: &str) -> i32 {
