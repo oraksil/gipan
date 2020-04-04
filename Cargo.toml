@@ -1,5 +1,5 @@
 [package]
-name = "ctrl"
+name = "gipan"
 version = "0.1.0"
 authors = ["gamz <gamzabaw@gmail.com>"]
 edition = "2018"
@@ -10,4 +10,4 @@ edition = "2018"
 atoi = "0.3.2"
 bytes = "0.5.2"
 nanomsg = "0.7.2"
-libemu = { path = "../libemu" }
+libemu = { path = "libemu" }

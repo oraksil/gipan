@@ -35,6 +35,12 @@ $ ctest .
 $ sudo cmake --build . --target install
 ```
 
+#### libvpx
+
+```
+$ brew install libvpx
+```
+
 ### Build
 ```
 $ cd ctrl
@@ -46,10 +52,10 @@ $ cargo build --release
 
 ### Run
 ```
-$ DYLD_LIBRARY_PATH=../../mame RUST_BACKTRACE=1 cargo run -- \
+$ DYLD_LIBRARY_PATH=../mame RUST_BACKTRACE=1 cargo run -- \
     --frame-output ipc://./frames.ipc \
     --key-input ipc://./keys.ipc \
-    --resolution 6400x480 \
+    --resolution 640x480 \
     --fps 30 \
     --game dino
 ```
