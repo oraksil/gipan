@@ -1,17 +1,15 @@
 extern crate libemu;
 
 use std::{
-    io::{Read, Write, Seek, SeekFrom},
+    io::{Write, Seek, SeekFrom},
     fs::File,
     env,
-    sync::mpsc::{SyncSender, Sender, Receiver},
+    sync::mpsc::{SyncSender, Receiver},
     sync::mpsc,
     thread,
 };
 
 use atoi::atoi;
-
-use bytes::BytesMut;
 
 use nanomsg::{
     Socket,
@@ -21,8 +19,8 @@ use nanomsg::{
 use libemu::{
     Emulator,
     MameEmulator,
-    Frame,
-    InputEvent,
+    EmuFrame,
+    EmuInputEvent,
     InputKind,
 };
 
@@ -105,7 +103,7 @@ fn channel<T>(buf_size: usize) -> (SyncSender<T>, Receiver<T>) {
     mpsc::sync_channel::<T>(buf_size)
 }
 
-fn run_frame_handler(props: &GameProperties, rx: Receiver<Frame>) {
+fn run_frame_handler(props: &GameProperties, rx: Receiver<EmuFrame>) {
     let frame_buf_size = props.max_frame_buffer_size();
     let frame_output_path = String::from(&props.frame_output);
 
@@ -116,12 +114,12 @@ fn run_frame_handler(props: &GameProperties, rx: Receiver<Frame>) {
             socket.bind(&frame_output_path).unwrap();
 
             loop {
-                let frame: Frame = rx.recv().unwrap();
+                let frame: EmuFrame = rx.recv().unwrap();
                 match socket.nb_write(frame.image_buf.as_ref()) {
-                    Ok(sent) => {
+                    Ok(_) => {
                         // println!("{}", sent);
                     },
-                    Err(err) => {
+                    Err(_) => {
                         // println!("problem while reading: {}", err);
                     }
                 }
@@ -132,7 +130,7 @@ fn run_frame_handler(props: &GameProperties, rx: Receiver<Frame>) {
         thread::spawn(move || {
             let mut f = File::create("./frames.raw").expect("failed to open frames.raw");
             loop {
-                let frame: Frame = rx.recv().unwrap();
+                let frame: EmuFrame = rx.recv().unwrap();
                 f.seek(SeekFrom::Start(0)).unwrap();
                 let sent = f.write(frame.image_buf.as_ref()).unwrap();
                 println!("{}", sent);
@@ -144,14 +142,14 @@ fn run_frame_handler(props: &GameProperties, rx: Receiver<Frame>) {
 fn run_input_handler(props: &GameProperties, mut emu: (impl Emulator + Send + 'static)) {
     let key_input_path = String::from(&props.key_input);
 
-    fn compose_input_evt_from_buf(b: &[u8]) -> InputEvent {
+    fn compose_input_evt_from_buf(b: &[u8]) -> EmuInputEvent {
         let evt_value = atoi(&b[0..3]).unwrap();
         let evt_type = match &b[3] {
             b'd' => InputKind::INPUT_KEY_DOWN,
             b'u' => InputKind::INPUT_KEY_UP,
             _ => InputKind::INPUT_KEY_DOWN,
         };
-        InputEvent { value: evt_value, kind: evt_type }
+        EmuInputEvent { value: evt_value, kind: evt_type }
     }
 
     thread::spawn(move || {
@@ -161,15 +159,15 @@ fn run_input_handler(props: &GameProperties, mut emu: (impl Emulator + Send + 's
         let mut buf = [0u8; 4];
         loop {
             match socket.nb_read(&mut buf) {
-                Ok(count) => {
-                    println!("read {} bytes", count);
-                    if count == 4 && buf.len() == 4 {
+                Ok(bytes_read) => {
+                    println!("read {} bytes", bytes_read);
+                    if bytes_read == 4 && buf.len() == 4 {
                         let evt = compose_input_evt_from_buf(&buf);
                         println!("input evt: {:?}", evt);
                         emu.put_input_event(evt);
                     }
                 },
-                Err(err) => {
+                Err(_) => {
                     // println!("problem while reading: {}", err);
                 }
             }
@@ -181,8 +179,8 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let props = extract_properties_from_args(&args);
 
-    let (frame_ch_tx, frame_ch_rx) = channel::<Frame>(props.max_frame_buffer_size());
-    let frame_passer = |frame: Frame| { frame_ch_tx.send(frame).unwrap(); };
+    let (frame_ch_tx, frame_ch_rx) = channel::<EmuFrame>(props.max_frame_buffer_size());
+    let frame_passer = |frame: EmuFrame| { frame_ch_tx.send(frame).unwrap(); };
 
     let mut emu = MameEmulator::emulator_instance();
     emu.set_frame_info(props.resolution.w, props.resolution.h);

@@ -16,19 +16,19 @@ pub enum InputKind {
 }
 
 #[derive(Debug)]
-pub struct InputEvent {
+pub struct EmuInputEvent {
     pub value: u8,
     pub kind: InputKind,
 }
 
-pub struct Frame {
+pub struct EmuFrame {
     pub image_buf: Bytes
 }
 
-pub trait Emulator {
+pub trait Emulator: Clone + Send {
     fn set_frame_info(&mut self, w: i32, h: i32);
-    fn set_frame_callback(&mut self, callback: impl FnMut(Frame));
-    fn put_input_event(&mut self, event: InputEvent);
+    fn set_frame_callback(&mut self, callback: impl FnMut(EmuFrame));
+    fn put_input_event(&mut self, event: EmuInputEvent);
     fn run(&self, system_name: &str) -> i32;
 }
 
@@ -40,7 +40,7 @@ pub struct MameEmulator {
 unsafe impl Send for MameEmulator {}
 
 impl MameEmulator {
-    pub fn emulator_instance() -> (impl Emulator + Clone) {
+    pub fn emulator_instance() -> impl Emulator {
         let mame_inst: *mut mame_t = unsafe { get_mame_instance() };
         MameEmulator {
             mame_inst: mame_inst,
@@ -77,19 +77,19 @@ impl Emulator for MameEmulator {
         }
     }
 
-    fn set_frame_callback(&mut self, mut callback: impl FnMut(Frame)) {
+    fn set_frame_callback(&mut self, mut callback: impl FnMut(EmuFrame)) {
         mame_register_callback(
             self.mame_inst,
             move |raw_frame: mame_frame_t| {
                 let buf = unsafe {
                     slice::from_raw_parts(raw_frame.buffer, raw_frame.buf_size)
                 };
-                callback(Frame { image_buf: Bytes::from(buf) });
+                callback(EmuFrame { image_buf: Bytes::from(buf) });
             }
         );
     }
 
-    fn put_input_event(&mut self, event: InputEvent) {
+    fn put_input_event(&mut self, event: EmuInputEvent) {
         let mame_input = mame_input_event_t {
             key: event.value,
             type_: match event.kind {
