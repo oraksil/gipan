@@ -26,7 +26,7 @@ pub struct EmuFrame {
 }
 
 pub trait Emulator: Clone + Send {
-    fn set_frame_info(&mut self, w: i32, h: i32);
+    fn set_frame_info(&mut self, w: usize, h: usize);
     fn set_frame_callback(&mut self, callback: impl FnMut(EmuFrame));
     fn put_input_event(&mut self, event: EmuInputEvent);
     fn run(&self, system_name: &str) -> i32;
@@ -68,10 +68,10 @@ where F: FnMut(mame_frame_t), {
 }
 
 impl Emulator for MameEmulator {
-    fn set_frame_info(&mut self, w: i32, h: i32) {
+    fn set_frame_info(&mut self, w: usize, h: usize) {
         unsafe {
             match (*self.mame_inst).set_frame_info {
-                Some(f) => f(w, h),
+                Some(f) => f(w as i32, h as i32),
                 None => panic!("set_frame_info method is not implemented.")
             }
         }

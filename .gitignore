@@ -17,5 +17,7 @@ nvram
 roms
 bgfx
 cfg
-*.raw
 
+# Temp
+*.raw
+*.ipc

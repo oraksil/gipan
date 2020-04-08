@@ -9,5 +9,15 @@ edition = "2018"
 [dependencies]
 atoi = "0.3.2"
 bytes = "0.5.2"
+
 nanomsg = "0.7.2"
+crossbeam-channel = "0.4"
+
+av-data = "0.2"
+av-codec = "0.2"
+av-format = "0.2"
+
+x264 = { git = "https://github.com/rust-av/x264-rs.git", version = "0.1.0" }
+libvpx = { git = "https://github.com/rust-av/vpx-rs", features = ["codec-trait"] }
+
 libemu = { path = "libemu" }

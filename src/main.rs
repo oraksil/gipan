@@ -1,20 +1,29 @@
 extern crate libemu;
 
+mod utils;
+
 use std::{
     io::{Write, Seek, SeekFrom},
     fs::File,
     env,
     sync::mpsc::{SyncSender, Receiver},
     sync::mpsc,
+    sync::Arc,
     thread,
 };
 
 use atoi::atoi;
+use bytes::{Bytes, BytesMut};
 
-use nanomsg::{
-    Socket,
-    Protocol,
-};
+use nanomsg::{Socket, Protocol};
+
+use av_data;
+use av_data::pixel::formats::YUV420;
+use av_data::pixel::Formaton;
+use av_codec;
+use av_codec::common::CodecList;
+
+use libvpx::encoder::VP9_DESCR;
 
 use libemu::{
     Emulator,
@@ -24,14 +33,17 @@ use libemu::{
     InputKind,
 };
 
-#[derive(Debug, Default)]
+const COLOR_DEPTH: usize = 4;
+const TIMEBASE: i64 = 60000;
+
+#[derive(Debug, Default, Copy, Clone)]
 struct Resolution {
-    w: i32,
-    h: i32,
+    w: usize,
+    h: usize,
 }
 
 impl Resolution {
-    fn from_size(w: i32, h: i32) -> Resolution {
+    fn from_size(w: usize, h: usize) -> Resolution {
         Resolution { w, h }
     }
 }
@@ -47,18 +59,17 @@ struct GameProperties {
 
 impl GameProperties {
     fn max_frame_buffer_size(&self) -> usize {
-        let color_depth = 4;
         let frame_cap = 10;
-        (self.resolution.w * self.resolution.h * color_depth * frame_cap) as usize
+        (self.resolution.w * self.resolution.h * COLOR_DEPTH * frame_cap) as usize
     }
 }
 
-fn parse_resolution(arg: String) -> (i32, i32) {
+fn parse_resolution(arg: String) -> (usize, usize) {
     let whs: Vec<usize> = arg.split("x")
         .map(|s| s.parse().unwrap())
         .collect();
 
-    (whs[0] as i32, whs[1] as i32)
+    (whs[0], whs[1])
 }
 
 fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
@@ -99,11 +110,101 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
     props
 }
 
-fn channel<T>(buf_size: usize) -> (SyncSender<T>, Receiver<T>) {
-    mpsc::sync_channel::<T>(buf_size)
+fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, frame_tx: SyncSender<EmuFrame>) {
+    let r = props.resolution;
+    let fps = props.fps;
+
+    let yuv420: Formaton = *YUV420;
+    let codec_video_info = av_data::params::VideoInfo {
+        width: r.w,
+        height: r.h,
+        format: Some(Arc::new(yuv420)),
+    };
+    let frame_video_info = av_data::frame::VideoInfo {
+        pic_type: av_data::frame::PictureType::I,
+        width: r.w,
+        height: r.h,
+        format: Arc::new(yuv420),
+    };
+    let codec_params = av_data::params::CodecParams {
+        kind: Some(av_data::params::MediaKind::Video(codec_video_info)),
+        codec_id: Some(String::from("vpx")),
+        extradata: None,
+        bit_rate: 256 * 1024,
+        convergence_window: 0,
+        delay: 0,
+    };
+
+    let encoder_list = av_codec::encoder::Codecs::from_list(&[VP9_DESCR]);
+    let mut enc_ctx = av_codec::encoder::Context::by_name(&encoder_list, &"vp9").unwrap();
+
+    enc_ctx.set_params(&codec_params).unwrap();
+    enc_ctx.configure().unwrap();
+    enc_ctx.set_option("cpu-used", 2u64).unwrap();
+    // enc_ctx.set_option("qmin", 0u64).unwrap();
+    // enc_ctx.set_option("qmax", 0u64).unwrap();
+
+    thread::spawn(move || {
+        let yuv_size = r.w * r.h / COLOR_DEPTH;
+        let chroma_size = yuv_size / 4;
+
+        let timescale = TIMEBASE / fps as i64;
+        let mut frame_idx = 0;
+
+        loop {
+            let raw_frame = encoder_rx.recv().unwrap();
+            println!("raw frame size: {}", raw_frame.image_buf.len());
+
+            let mut y = BytesMut::with_capacity(yuv_size);
+            let mut u = BytesMut::with_capacity(chroma_size);
+            let mut v = BytesMut::with_capacity(chroma_size);
+            utils::bgra_to_yuv420(r.w, &raw_frame.image_buf, &mut y, &mut u, &mut v);
+            println!("yuv frame size: y: {}, u: {}, v: {}", y.len(), u.len(), v.len());
+
+            let yuv_bufs = [y, u, v];
+            let source = yuv_bufs.iter().map(|v| v.as_ref());
+
+            // https://stackoverflow.com/questions/13286022/can-anyone-help-in-understanding-avframe-linesize
+            let yuv_strides = [r.w, r.w / 2, r.w / 2];
+            let linesizes = yuv_strides.iter().map(|v| *v);
+
+            let av_frame = {
+                let time_info = {
+                    let mut ti: av_data::timeinfo::TimeInfo = av_data::timeinfo::TimeInfo::default();
+                    ti.timebase = Some(av_data::rational::Rational64::new(TIMEBASE, 1));
+                    ti.pts = Some(timescale * frame_idx);
+                    ti
+                };
+                frame_idx += 1;
+
+                let arc_frame = {
+                    let mut f = av_data::frame::new_default_frame(
+                        av_data::frame::MediaKind::Video(frame_video_info.clone()),
+                        Some(time_info)
+                    );
+                    f.copy_from_slice(source, linesizes);
+                    Arc::new(f)
+                };
+                arc_frame
+            };
+
+            let encoded_frame = {
+                enc_ctx.send_frame(&av_frame).unwrap();
+                enc_ctx.flush().unwrap();
+
+                let packet = enc_ctx.receive_packet().unwrap();
+                let buf = Bytes::from(packet.data);
+                println!("encoded frame size: {}", buf.len());
+
+                EmuFrame { image_buf: buf }
+            };
+
+            frame_tx.send(encoded_frame).unwrap();
+        }
+    });
 }
 
-fn run_frame_handler(props: &GameProperties, rx: Receiver<EmuFrame>) {
+fn run_frame_handler(props: &GameProperties, frame_rx: Receiver<EmuFrame>) {
     let frame_buf_size = props.max_frame_buffer_size();
     let frame_output_path = String::from(&props.frame_output);
 
@@ -114,13 +215,13 @@ fn run_frame_handler(props: &GameProperties, rx: Receiver<EmuFrame>) {
             socket.bind(&frame_output_path).unwrap();
 
             loop {
-                let frame: EmuFrame = rx.recv().unwrap();
+                let frame: EmuFrame = frame_rx.recv().unwrap();
                 match socket.nb_write(frame.image_buf.as_ref()) {
-                    Ok(_) => {
-                        // println!("{}", sent);
+                    Ok(sent) => {
+                        println!("sending frame to nanomsg q: {}", sent);
                     },
                     Err(_) => {
-                        // println!("problem while reading: {}", err);
+                        // println!("problem while writing: {}", err);
                     }
                 }
             }
@@ -130,7 +231,7 @@ fn run_frame_handler(props: &GameProperties, rx: Receiver<EmuFrame>) {
         thread::spawn(move || {
             let mut f = File::create("./frames.raw").expect("failed to open frames.raw");
             loop {
-                let frame: EmuFrame = rx.recv().unwrap();
+                let frame: EmuFrame = frame_rx.recv().unwrap();
                 f.seek(SeekFrom::Start(0)).unwrap();
                 let sent = f.write(frame.image_buf.as_ref()).unwrap();
                 println!("{}", sent);
@@ -179,14 +280,18 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let props = extract_properties_from_args(&args);
 
-    let (frame_ch_tx, frame_ch_rx) = channel::<EmuFrame>(props.max_frame_buffer_size());
-    let frame_passer = |frame: EmuFrame| { frame_ch_tx.send(frame).unwrap(); };
+    let ch_buf_size = props.max_frame_buffer_size();
+    let (encode_tx, encode_rx) = mpsc::sync_channel::<EmuFrame>(ch_buf_size);
+    let (frame_tx, frame_rx) = mpsc::sync_channel::<EmuFrame>(ch_buf_size);
 
     let mut emu = MameEmulator::emulator_instance();
     emu.set_frame_info(props.resolution.w, props.resolution.h);
+
+    let frame_passer = |frame: EmuFrame| { encode_tx.send(frame).unwrap(); };
     emu.set_frame_callback(frame_passer);
 
-    run_frame_handler(&props, frame_ch_rx);
+    run_frame_encoder(&props, encode_rx, frame_tx);
+    run_frame_handler(&props, frame_rx);
     run_input_handler(&props, emu.clone());
 
     emu.run(&props.system_name);

@@ -39,6 +39,7 @@ $ sudo cmake --build . --target install
 
 ```
 $ brew install libvpx
+$ brew install x264
 ```
 
 ### Build
