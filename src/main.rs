@@ -10,6 +10,8 @@ use std::{
     sync::mpsc,
     sync::Arc,
     thread,
+    ops::Sub,
+    time::{SystemTime, Duration, UNIX_EPOCH},
 };
 
 use atoi::atoi;
@@ -36,6 +38,9 @@ use libemu::{
 const COLOR_DEPTH: usize = 4;
 const TIMEBASE: i64 = 60000;
 
+const FRAME_EXPIRE_DURATION: Duration = Duration::from_millis(50);
+const CHANNEL_BUF_SIZE: usize = 64;
+
 #[derive(Debug, Default, Copy, Clone)]
 struct Resolution {
     w: usize,
@@ -55,13 +60,6 @@ struct GameProperties {
     system_name: String,
     frame_output: String,
     key_input: String,
-}
-
-impl GameProperties {
-    fn max_frame_buffer_size(&self) -> usize {
-        let frame_cap = 10;
-        (self.resolution.w * self.resolution.h * COLOR_DEPTH * frame_cap) as usize
-    }
 }
 
 fn parse_resolution(arg: String) -> (usize, usize) {
@@ -140,7 +138,7 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
 
     enc_ctx.set_params(&codec_params).unwrap();
     enc_ctx.configure().unwrap();
-    enc_ctx.set_option("cpu-used", 2u64).unwrap();
+    enc_ctx.set_option("cpu-used", 8u64).unwrap();
     // enc_ctx.set_option("qmin", 0u64).unwrap();
     // enc_ctx.set_option("qmax", 0u64).unwrap();
 
@@ -148,12 +146,22 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
         let yuv_size = r.w * r.h / COLOR_DEPTH;
         let chroma_size = yuv_size / 4;
 
+        // Regarding timebase and pts,
+        // https://stackoverflow.com/questions/43333542/what-is-video-timescale-timebase-or-timestamp-in-ffmpeg/43337235
         let timescale = TIMEBASE / fps as i64;
         let mut frame_idx = 0;
 
         loop {
             let raw_frame = encoder_rx.recv().unwrap();
             println!("raw frame size: {}", raw_frame.image_buf.len());
+
+            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+            let expired = now.sub(FRAME_EXPIRE_DURATION);
+            if raw_frame.timestamp < expired {
+                println!("raw frame is decayed, dropping.. {:?} < {:?}", raw_frame.timestamp, expired);
+                frame_idx += 1;
+                continue;
+            }
 
             let mut y = BytesMut::with_capacity(yuv_size);
             let mut u = BytesMut::with_capacity(chroma_size);
@@ -175,7 +183,6 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
                     ti.pts = Some(timescale * frame_idx);
                     ti
                 };
-                frame_idx += 1;
 
                 let arc_frame = {
                     let mut f = av_data::frame::new_default_frame(
@@ -196,29 +203,29 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
                 let buf = Bytes::from(packet.data);
                 println!("encoded frame size: {}", buf.len());
 
-                EmuFrame { image_buf: buf }
+                EmuFrame { image_buf: buf, timestamp: raw_frame.timestamp }
             };
 
             frame_tx.send(encoded_frame).unwrap();
+
+            frame_idx += 1;
         }
     });
 }
 
 fn run_frame_handler(props: &GameProperties, frame_rx: Receiver<EmuFrame>) {
-    let frame_buf_size = props.max_frame_buffer_size();
     let frame_output_path = String::from(&props.frame_output);
 
     if frame_output_path.starts_with("ipc://") {
         thread::spawn(move || {
             let mut socket = Socket::new(Protocol::Push).unwrap();
-            socket.set_send_buffer_size(frame_buf_size).unwrap();
             socket.bind(&frame_output_path).unwrap();
 
             loop {
                 let frame: EmuFrame = frame_rx.recv().unwrap();
                 match socket.nb_write(frame.image_buf.as_ref()) {
                     Ok(sent) => {
-                        println!("sending frame to nanomsg q: {}", sent);
+                        println!("sent frame to nanomsg q: {}", sent);
                     },
                     Err(_) => {
                         // println!("problem while writing: {}", err);
@@ -234,7 +241,7 @@ fn run_frame_handler(props: &GameProperties, frame_rx: Receiver<EmuFrame>) {
                 let frame: EmuFrame = frame_rx.recv().unwrap();
                 f.seek(SeekFrom::Start(0)).unwrap();
                 let sent = f.write(frame.image_buf.as_ref()).unwrap();
-                println!("{}", sent);
+                println!("wrote frame to file: {}", sent);
             }
         });
     }
@@ -280,9 +287,8 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let props = extract_properties_from_args(&args);
 
-    let ch_buf_size = props.max_frame_buffer_size();
-    let (encode_tx, encode_rx) = mpsc::sync_channel::<EmuFrame>(ch_buf_size);
-    let (frame_tx, frame_rx) = mpsc::sync_channel::<EmuFrame>(ch_buf_size);
+    let (encode_tx, encode_rx) = mpsc::sync_channel::<EmuFrame>(CHANNEL_BUF_SIZE);
+    let (frame_tx, frame_rx) = mpsc::sync_channel::<EmuFrame>(CHANNEL_BUF_SIZE);
 
     let mut emu = MameEmulator::emulator_instance();
     emu.set_frame_info(props.resolution.w, props.resolution.h);

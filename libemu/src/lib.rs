@@ -4,6 +4,8 @@
 #![allow(unused_imports)]
 
 use std::slice;
+use std::time::{SystemTime, Duration, UNIX_EPOCH};
+
 use libc::*;
 use bytes::Bytes;
 
@@ -22,7 +24,8 @@ pub struct EmuInputEvent {
 }
 
 pub struct EmuFrame {
-    pub image_buf: Bytes
+    pub image_buf: Bytes,
+    pub timestamp: Duration,
 }
 
 pub trait Emulator: Clone + Send {
@@ -84,7 +87,10 @@ impl Emulator for MameEmulator {
                 let buf = unsafe {
                     slice::from_raw_parts(raw_frame.buffer, raw_frame.buf_size)
                 };
-                callback(EmuFrame { image_buf: Bytes::from(buf) });
+                callback(EmuFrame {
+                    image_buf: Bytes::from(buf),
+                    timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
+                });
             }
         );
     }
