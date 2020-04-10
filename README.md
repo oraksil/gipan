@@ -58,5 +58,6 @@ $ DYLD_LIBRARY_PATH=../mame RUST_BACKTRACE=1 cargo run -- \
     --key-input ipc://./keys.ipc \
     --resolution 640x480 \
     --fps 30 \
+    --keyframe_interval 12 \
     --game dino
 ```

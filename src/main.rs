@@ -36,9 +36,7 @@ use libemu::{
 };
 
 const COLOR_DEPTH: usize = 4;
-const TIMEBASE: i64 = 60000;
-
-const FRAME_EXPIRE_DURATION: Duration = Duration::from_millis(50);
+const FRAME_EXPIRE_DURATION: Duration = Duration::from_millis(100);
 const CHANNEL_BUF_SIZE: usize = 64;
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -57,6 +55,7 @@ impl Resolution {
 struct GameProperties {
     resolution: Resolution,
     fps: i32,
+    keyframe_interval: i32,
     system_name: String,
     frame_output: String,
     key_input: String,
@@ -76,6 +75,7 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
     // default props
     props.resolution = Resolution::from_size(480, 320);
     props.fps = 30;
+    props.keyframe_interval = 12;
     props.frame_output = String::from("ipc://./frames.ipc");
 
     for (i, arg) in args.iter().map(|s| s.as_str()).enumerate() {
@@ -92,6 +92,9 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
             },
             "--fps" => {
                 props.fps = next_arg().parse().unwrap()
+            },
+            "--keyframe-interval" => {
+                props.keyframe_interval = next_arg().parse().unwrap()
             },
             "--resolution" => {
                 let (w, h) = parse_resolution(next_arg());
@@ -110,25 +113,32 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
 
 fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, frame_tx: SyncSender<EmuFrame>) {
     let r = props.resolution;
-    let fps = props.fps;
+    let fps = props.fps as i64;
+    let kf_interval = props.keyframe_interval as i64;
 
-    let yuv420: Formaton = *YUV420;
+    const YUV_FMT_420: Formaton = *YUV420;
     let codec_video_info = av_data::params::VideoInfo {
         width: r.w,
         height: r.h,
-        format: Some(Arc::new(yuv420)),
+        format: Some(Arc::new(YUV_FMT_420)),
     };
-    let frame_video_info = av_data::frame::VideoInfo {
+    let i_frame_video_info = av_data::frame::VideoInfo {
         pic_type: av_data::frame::PictureType::I,
         width: r.w,
         height: r.h,
-        format: Arc::new(yuv420),
+        format: Arc::new(YUV_FMT_420),
+    };
+    let b_frame_video_info = av_data::frame::VideoInfo {
+        pic_type: av_data::frame::PictureType::B,
+        width: r.w,
+        height: r.h,
+        format: Arc::new(YUV_FMT_420),
     };
     let codec_params = av_data::params::CodecParams {
         kind: Some(av_data::params::MediaKind::Video(codec_video_info)),
         codec_id: Some(String::from("vpx")),
         extradata: None,
-        bit_rate: 256 * 1024,
+        bit_rate: 0,
         convergence_window: 0,
         delay: 0,
     };
@@ -138,9 +148,9 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
 
     enc_ctx.set_params(&codec_params).unwrap();
     enc_ctx.configure().unwrap();
-    enc_ctx.set_option("cpu-used", 8u64).unwrap();
-    // enc_ctx.set_option("qmin", 0u64).unwrap();
-    // enc_ctx.set_option("qmax", 0u64).unwrap();
+    enc_ctx.set_option("cpu-used", 4u64).unwrap();
+    enc_ctx.set_option("qmin", 0u64).unwrap();
+    enc_ctx.set_option("qmax", 0u64).unwrap();
 
     thread::spawn(move || {
         let yuv_size = r.w * r.h / COLOR_DEPTH;
@@ -148,8 +158,8 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
 
         // Regarding timebase and pts,
         // https://stackoverflow.com/questions/43333542/what-is-video-timescale-timebase-or-timestamp-in-ffmpeg/43337235
-        let timescale = TIMEBASE / fps as i64;
         let mut frame_idx = 0;
+        let mut encoded_frame_cnt = 0;
 
         loop {
             let raw_frame = encoder_rx.recv().unwrap();
@@ -179,16 +189,18 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
             let av_frame = {
                 let time_info = {
                     let mut ti: av_data::timeinfo::TimeInfo = av_data::timeinfo::TimeInfo::default();
-                    ti.timebase = Some(av_data::rational::Rational64::new(TIMEBASE, 1));
-                    ti.pts = Some(timescale * frame_idx);
+                    ti.timebase = Some(av_data::rational::Rational64::new(1, fps));
+                    ti.pts = Some(frame_idx);
                     ti
                 };
 
+                let frame_kind = if encoded_frame_cnt % kf_interval == 0 {
+                    av_data::frame::MediaKind::Video(i_frame_video_info.clone())
+                } else {
+                    av_data::frame::MediaKind::Video(b_frame_video_info.clone())
+                };
                 let arc_frame = {
-                    let mut f = av_data::frame::new_default_frame(
-                        av_data::frame::MediaKind::Video(frame_video_info.clone()),
-                        Some(time_info)
-                    );
+                    let mut f = av_data::frame::new_default_frame(frame_kind, Some(time_info));
                     f.copy_from_slice(source, linesizes);
                     Arc::new(f)
                 };
@@ -209,6 +221,7 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
             frame_tx.send(encoded_frame).unwrap();
 
             frame_idx += 1;
+            encoded_frame_cnt += 1;
         }
     });
 }
