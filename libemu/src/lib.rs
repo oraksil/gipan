@@ -7,7 +7,6 @@ use std::slice;
 use std::time::{SystemTime, Duration, UNIX_EPOCH};
 
 use libc::*;
-use bytes::Bytes;
 
 include!("./bindings.rs");
 
@@ -24,13 +23,19 @@ pub struct EmuInputEvent {
 }
 
 pub struct EmuFrame {
-    pub image_buf: Bytes,
+    pub buf: Vec<u8>,
+    pub timestamp: Duration,
+}
+
+pub struct EmuSound {
+    pub buf: Vec<i16>,
     pub timestamp: Duration,
 }
 
 pub trait Emulator: Clone + Send {
     fn set_frame_info(&mut self, w: usize, h: usize);
     fn set_frame_callback(&mut self, callback: impl FnMut(EmuFrame));
+    fn set_sound_callback(&mut self, callback: impl FnMut(EmuSound));
     fn put_input_event(&mut self, event: EmuInputEvent);
     fn run(&self, system_name: &str) -> i32;
 }
@@ -52,22 +57,40 @@ impl MameEmulator {
 }
 
 // https://blog.seantheprogrammer.com/neat-rust-tricks-passing-rust-closures-to-c
-fn mame_register_callback<F>(mame: *mut mame_t, callback: F)
+fn mame_register_frame_cb<F>(mame: *mut mame_t, callback: F)
 where F: FnMut(mame_frame_t), {
     let ctx = Box::into_raw(Box::new(callback));
     unsafe {
         match (*mame).set_frame_cb {
-            Some(f) => f(ctx as *mut _, Some(mame_call_closure::<F>)),
+            Some(f) => f(ctx as *mut _, Some(mame_frame_cb_closure::<F>)),
             None => panic!("set_frame_cb method is not implemented.")
         }
     }
 }
 
-unsafe extern "C" fn mame_call_closure<F>(ctx: *mut libc::c_void, frame: mame_frame_t)
+fn mame_register_sound_cb<F>(mame: *mut mame_t, callback: F)
+where F: FnMut(mame_sound_t), {
+    let ctx = Box::into_raw(Box::new(callback));
+    unsafe {
+        match (*mame).set_sound_cb {
+            Some(f) => f(ctx as *mut _, Some(mame_sound_cb_closure::<F>)),
+            None => panic!("set_frame_cb method is not implemented.")
+        }
+    }
+}
+
+unsafe extern "C" fn mame_frame_cb_closure<F>(ctx: *mut libc::c_void, frame: mame_frame_t)
 where F: FnMut(mame_frame_t), {
     let callback_ptr = ctx as *mut F;
     let callback = &mut *callback_ptr;
     callback(frame);
+}
+
+unsafe extern "C" fn mame_sound_cb_closure<F>(ctx: *mut libc::c_void, sound: mame_sound_t)
+where F: FnMut(mame_sound_t), {
+    let callback_ptr = ctx as *mut F;
+    let callback = &mut *callback_ptr;
+    callback(sound);
 }
 
 impl Emulator for MameEmulator {
@@ -81,14 +104,29 @@ impl Emulator for MameEmulator {
     }
 
     fn set_frame_callback(&mut self, mut callback: impl FnMut(EmuFrame)) {
-        mame_register_callback(
+        mame_register_frame_cb(
             self.mame_inst,
             move |raw_frame: mame_frame_t| {
                 let buf = unsafe {
                     slice::from_raw_parts(raw_frame.buffer, raw_frame.buf_size)
                 };
                 callback(EmuFrame {
-                    image_buf: Bytes::from(buf),
+                    buf: Vec::from(buf),
+                    timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
+                });
+            }
+        );
+    }
+
+    fn set_sound_callback(&mut self, mut callback: impl FnMut(EmuSound)) {
+        mame_register_sound_cb(
+            self.mame_inst,
+            move |raw_sound: mame_sound_t| {
+                let buf = unsafe {
+                    slice::from_raw_parts(raw_sound.buffer, raw_sound.buf_size)
+                };
+                callback(EmuSound {
+                    buf: Vec::from(buf),
                     timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
                 });
             }

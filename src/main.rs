@@ -15,7 +15,6 @@ use std::{
 };
 
 use atoi::atoi;
-use bytes::{Bytes, BytesMut};
 
 use nanomsg::{Socket, Protocol};
 
@@ -35,8 +34,7 @@ use libemu::{
     InputKind,
 };
 
-const COLOR_DEPTH: usize = 4;
-const FRAME_EXPIRE_DURATION: Duration = Duration::from_millis(100);
+const FRAME_EXPIRE_DURATION: Duration = Duration::from_millis(500);
 const CHANNEL_BUF_SIZE: usize = 64;
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -149,11 +147,9 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
     enc_ctx.set_params(&codec_params).unwrap();
     enc_ctx.configure().unwrap();
     enc_ctx.set_option("cpu-used", 4u64).unwrap();
-    enc_ctx.set_option("qmin", 0u64).unwrap();
-    enc_ctx.set_option("qmax", 0u64).unwrap();
 
     thread::spawn(move || {
-        let yuv_size = r.w * r.h / COLOR_DEPTH;
+        let yuv_size = r.w * r.h;
         let chroma_size = yuv_size / 4;
 
         // Regarding timebase and pts,
@@ -163,7 +159,7 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
 
         loop {
             let raw_frame = encoder_rx.recv().unwrap();
-            println!("raw frame size: {}", raw_frame.image_buf.len());
+            println!("raw frame size: {}", raw_frame.buf.len());
 
             let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
             let expired = now.sub(FRAME_EXPIRE_DURATION);
@@ -173,10 +169,10 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
                 continue;
             }
 
-            let mut y = BytesMut::with_capacity(yuv_size);
-            let mut u = BytesMut::with_capacity(chroma_size);
-            let mut v = BytesMut::with_capacity(chroma_size);
-            utils::bgra_to_yuv420(r.w, &raw_frame.image_buf, &mut y, &mut u, &mut v);
+            let mut y = vec![0u8; yuv_size];
+            let mut u = vec![0u8; chroma_size];
+            let mut v = vec![0u8; chroma_size];
+            utils::bgra_to_yuv420(r.w, r.h, &raw_frame.buf, y.as_mut(), u.as_mut(), v.as_mut());
             println!("yuv frame size: y: {}, u: {}, v: {}", y.len(), u.len(), v.len());
 
             let yuv_bufs = [y, u, v];
@@ -212,10 +208,10 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
                 enc_ctx.flush().unwrap();
 
                 let packet = enc_ctx.receive_packet().unwrap();
-                let buf = Bytes::from(packet.data);
+                let buf = Vec::from(packet.data);
                 println!("encoded frame size: {}", buf.len());
 
-                EmuFrame { image_buf: buf, timestamp: raw_frame.timestamp }
+                EmuFrame { buf: buf, timestamp: raw_frame.timestamp }
             };
 
             frame_tx.send(encoded_frame).unwrap();
@@ -236,7 +232,7 @@ fn run_frame_handler(props: &GameProperties, frame_rx: Receiver<EmuFrame>) {
 
             loop {
                 let frame: EmuFrame = frame_rx.recv().unwrap();
-                match socket.nb_write(frame.image_buf.as_ref()) {
+                match socket.nb_write(frame.buf.as_ref()) {
                     Ok(sent) => {
                         println!("sent frame to nanomsg q: {}", sent);
                     },
@@ -253,7 +249,7 @@ fn run_frame_handler(props: &GameProperties, frame_rx: Receiver<EmuFrame>) {
             loop {
                 let frame: EmuFrame = frame_rx.recv().unwrap();
                 f.seek(SeekFrom::Start(0)).unwrap();
-                let sent = f.write(frame.image_buf.as_ref()).unwrap();
+                let sent = f.write(frame.buf.as_ref()).unwrap();
                 println!("wrote frame to file: {}", sent);
             }
         });
