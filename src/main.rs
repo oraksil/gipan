@@ -3,9 +3,8 @@ extern crate libemu;
 mod utils;
 
 use std::{
-    io::{Write, Seek, SeekFrom},
-    fs::File,
     env,
+    mem,
     sync::mpsc::{SyncSender, Receiver},
     sync::mpsc,
     sync::Arc,
@@ -25,16 +24,18 @@ use av_codec;
 use av_codec::common::CodecList;
 
 use libvpx::encoder::VP9_DESCR;
+use libopus::encoder::OPUS_DESCR;
 
 use libemu::{
     Emulator,
     MameEmulator,
-    EmuFrame,
+    EmuImageFrame,
+    EmuSoundFrame,
     EmuInputEvent,
     InputKind,
 };
 
-const FRAME_EXPIRE_DURATION: Duration = Duration::from_millis(500);
+const FRAME_EXPIRE_DURATION: Duration = Duration::from_millis(100);
 const CHANNEL_BUF_SIZE: usize = 64;
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -52,11 +53,16 @@ impl Resolution {
 #[derive(Debug, Default)]
 struct GameProperties {
     resolution: Resolution,
-    fps: i32,
+    fps: usize,
     keyframe_interval: i32,
     system_name: String,
-    frame_output: String,
+    imageframe_output: String,
+    soundframe_output: String,
     key_input: String,
+}
+
+struct EmuEncSoundFrame {
+    pub buf: Vec<u8>,
 }
 
 fn parse_resolution(arg: String) -> (usize, usize) {
@@ -74,7 +80,8 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
     props.resolution = Resolution::from_size(480, 320);
     props.fps = 30;
     props.keyframe_interval = 12;
-    props.frame_output = String::from("ipc://./frames.ipc");
+    props.imageframe_output = String::from("ipc://./imageframes.ipc");
+    props.soundframe_output = String::from("ipc://./soundframes.ipc");
 
     for (i, arg) in args.iter().map(|s| s.as_str()).enumerate() {
         let next_arg = || { args[i+1].clone() };
@@ -82,8 +89,11 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
             "--game" => {
                 props.system_name = next_arg()
             }
-            "--frame-output" => {
-                props.frame_output = next_arg()
+            "--imageframe-output" => {
+                props.imageframe_output = next_arg()
+            },
+            "--soundframe-output" => {
+                props.soundframe_output = next_arg()
             },
             "--key-input" => {
                 props.key_input = next_arg()
@@ -109,31 +119,39 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
     props
 }
 
-fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, frame_tx: SyncSender<EmuFrame>) {
+fn now_utc() -> Duration {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
+}
+
+fn run_frame_encoder(
+    props: &GameProperties,
+    encoder_rx: Receiver<EmuImageFrame>,
+    frame_tx: SyncSender<EmuImageFrame>) {
+
     let r = props.resolution;
     let fps = props.fps as i64;
     let kf_interval = props.keyframe_interval as i64;
 
     const YUV_FMT_420: Formaton = *YUV420;
-    let codec_video_info = av_data::params::VideoInfo {
+    let codec_info = av_data::params::VideoInfo {
         width: r.w,
         height: r.h,
         format: Some(Arc::new(YUV_FMT_420)),
     };
-    let i_frame_video_info = av_data::frame::VideoInfo {
+    let i_frame_info = av_data::frame::VideoInfo {
         pic_type: av_data::frame::PictureType::I,
         width: r.w,
         height: r.h,
         format: Arc::new(YUV_FMT_420),
     };
-    let b_frame_video_info = av_data::frame::VideoInfo {
-        pic_type: av_data::frame::PictureType::B,
+    let p_frame_info = av_data::frame::VideoInfo {
+        pic_type: av_data::frame::PictureType::P,
         width: r.w,
         height: r.h,
         format: Arc::new(YUV_FMT_420),
     };
     let codec_params = av_data::params::CodecParams {
-        kind: Some(av_data::params::MediaKind::Video(codec_video_info)),
+        kind: Some(av_data::params::MediaKind::Video(codec_info)),
         codec_id: Some(String::from("vpx")),
         extradata: None,
         bit_rate: 0,
@@ -159,9 +177,9 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
 
         loop {
             let raw_frame = encoder_rx.recv().unwrap();
-            println!("raw frame size: {}", raw_frame.buf.len());
+            // println!("raw frame size: {}", raw_frame.buf.len());
 
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+            let now = now_utc();
             let expired = now.sub(FRAME_EXPIRE_DURATION);
             if raw_frame.timestamp < expired {
                 println!("raw frame is decayed, dropping.. {:?} < {:?}", raw_frame.timestamp, expired);
@@ -173,7 +191,7 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
             let mut u = vec![0u8; chroma_size];
             let mut v = vec![0u8; chroma_size];
             utils::bgra_to_yuv420(r.w, r.h, &raw_frame.buf, y.as_mut(), u.as_mut(), v.as_mut());
-            println!("yuv frame size: y: {}, u: {}, v: {}", y.len(), u.len(), v.len());
+            // println!("yuv frame size: y: {}, u: {}, v: {}", y.len(), u.len(), v.len());
 
             let yuv_bufs = [y, u, v];
             let source = yuv_bufs.iter().map(|v| v.as_ref());
@@ -191,9 +209,9 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
                 };
 
                 let frame_kind = if encoded_frame_cnt % kf_interval == 0 {
-                    av_data::frame::MediaKind::Video(i_frame_video_info.clone())
+                    av_data::frame::MediaKind::Video(i_frame_info.clone())
                 } else {
-                    av_data::frame::MediaKind::Video(b_frame_video_info.clone())
+                    av_data::frame::MediaKind::Video(p_frame_info.clone())
                 };
                 let arc_frame = {
                     let mut f = av_data::frame::new_default_frame(frame_kind, Some(time_info));
@@ -209,9 +227,9 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
 
                 let packet = enc_ctx.receive_packet().unwrap();
                 let buf = Vec::from(packet.data);
-                println!("encoded frame size: {}", buf.len());
+                // println!("encoded frame size: {}", buf.len());
 
-                EmuFrame { buf: buf, timestamp: raw_frame.timestamp }
+                EmuImageFrame { buf: buf, timestamp: raw_frame.timestamp }
             };
 
             frame_tx.send(encoded_frame).unwrap();
@@ -222,38 +240,173 @@ fn run_frame_encoder(props: &GameProperties, encoder_rx: Receiver<EmuFrame>, fra
     });
 }
 
-fn run_frame_handler(props: &GameProperties, frame_rx: Receiver<EmuFrame>) {
-    let frame_output_path = String::from(&props.frame_output);
+fn run_frame_handler(props: &GameProperties, frame_rx: Receiver<EmuImageFrame>) {
+    let frame_output_path = String::from(&props.imageframe_output);
+    assert!(frame_output_path.starts_with("ipc://"));
 
-    if frame_output_path.starts_with("ipc://") {
-        thread::spawn(move || {
-            let mut socket = Socket::new(Protocol::Push).unwrap();
-            socket.bind(&frame_output_path).unwrap();
+    thread::spawn(move || {
+        let mut socket = Socket::new(Protocol::Push).unwrap();
+        socket.bind(&frame_output_path).unwrap();
 
-            loop {
-                let frame: EmuFrame = frame_rx.recv().unwrap();
-                match socket.nb_write(frame.buf.as_ref()) {
-                    Ok(sent) => {
-                        println!("sent frame to nanomsg q: {}", sent);
-                    },
-                    Err(_) => {
-                        // println!("problem while writing: {}", err);
-                    }
+        loop {
+            let frame: EmuImageFrame = frame_rx.recv().unwrap();
+            match socket.nb_write(frame.buf.as_ref()) {
+                Ok(_) => {
+                    // println!("sent frame to nanomsg q: {}", sent);
+                },
+                Err(_) => {
+                    // println!("problem while writing: {}", err);
                 }
             }
-        });
+        }
+    });
+}
+
+fn copy_interleaved_sound_samples(src: &Vec<i16>, dst_frame: &mut av_data::frame::Frame) {
+    let samples = src.len() / 2;
+
+    let l = {
+        let buf = dst_frame.buf.as_mut_slice_inner(0).unwrap();
+        unsafe { mem::transmute::<&mut [u8], &mut [i16]>(buf) }
+    };
+    let r = {
+        let buf = dst_frame.buf.as_mut_slice_inner(1).unwrap();
+        unsafe { mem::transmute::<&mut [u8], &mut [i16]>(buf) }
+    };
+    for i in 0..samples {
+        l[i] = src[i*2];
+        r[i] = src[i*2+1];
     }
-    else {
-        thread::spawn(move || {
-            let mut f = File::create("./frames.raw").expect("failed to open frames.raw");
-            loop {
-                let frame: EmuFrame = frame_rx.recv().unwrap();
-                f.seek(SeekFrom::Start(0)).unwrap();
-                let sent = f.write(frame.buf.as_ref()).unwrap();
-                println!("wrote frame to file: {}", sent);
+}
+
+fn copy_interleaved_sound_samples_mono(src: &Vec<i16>, dst_frame: &mut av_data::frame::Frame) {
+    let samples = src.len() / 2;
+
+    let b = {
+        let buf = dst_frame.buf.as_mut_slice_inner(0).unwrap();
+        unsafe { mem::transmute::<&mut [u8], &mut [i16]>(buf) }
+    };
+    for i in 0..samples {
+        b[i] = src[i*2];
+    }
+}
+
+fn run_sound_encoder(
+    props: &GameProperties,
+    encoder_rx: Receiver<EmuSoundFrame>,
+    frame_tx: SyncSender<EmuEncSoundFrame>) {
+
+    let fps = props.fps as i64;
+
+    let encoder_list = av_codec::encoder::Codecs::from_list(&[OPUS_DESCR]);
+    let mut enc_ctx = av_codec::encoder::Context::by_name(&encoder_list, &"opus").unwrap();
+
+    // TODO: need to configure correct parameters
+    let soniton = av_data::audiosample::Soniton {
+        bits: 16,
+        be: false,
+        packed: false,
+        planar: false,
+        float: false,
+        signed: true,
+    };
+    // let audio_channel_map = av_data::audiosample::ChannelMap::default_map(2);
+    let audio_channel_map_mono = av_data::audiosample::ChannelMap::default_map(1);
+    let codec_info = av_data::params::AudioInfo {
+        rate: 0,
+        map: Some(audio_channel_map_mono.clone()),
+        format: None,
+    };
+    let codec_params = av_data::params::CodecParams {
+        kind: Some(av_data::params::MediaKind::Audio(codec_info)),
+        codec_id: Some(String::from("libopus")),
+        extradata: None,
+        bit_rate: 0,
+        convergence_window: 0,
+        delay: 0,
+    };
+
+    enc_ctx.set_params(&codec_params).unwrap();
+    enc_ctx.configure().unwrap();
+    // enc_ctx.set_option("application", "audio").unwrap();
+
+    thread::spawn(move || {
+        let mut frame_idx = 0;
+
+        loop {
+            let raw_frame = encoder_rx.recv().unwrap();
+            // println!("raw sound size: {}", raw_frame.buf.len());
+
+            let now = now_utc();
+            let expired = now.sub(FRAME_EXPIRE_DURATION);
+            if raw_frame.timestamp < expired {
+                println!("raw frame is decayed, dropping.. {:?} < {:?}", raw_frame.timestamp, expired);
+                frame_idx += 1;
+                continue;
             }
-        });
-    }
+
+            let av_frame = {
+                let time_info = {
+                    let mut ti: av_data::timeinfo::TimeInfo = av_data::timeinfo::TimeInfo::default();
+                    ti.timebase = Some(av_data::rational::Rational64::new(1, fps));
+                    ti.pts = Some(frame_idx);
+                    ti
+                };
+
+                let frame_info = av_data::frame::AudioInfo {
+                    samples: raw_frame.samples,
+                    rate: raw_frame.sample_rate,
+                    map: audio_channel_map_mono.clone(),
+                    format: Arc::new(soniton),
+                };
+
+                let frame_kind = av_data::frame::MediaKind::Audio(frame_info.clone());
+                let arc_frame = {
+                    let mut f = av_data::frame::new_default_frame(frame_kind, Some(time_info));
+                    // copy_interleaved_sound_samples(&raw_frame.buf, &mut f);
+                    copy_interleaved_sound_samples_mono(&raw_frame.buf, &mut f);
+                    Arc::new(f)
+                };
+                arc_frame
+            };
+
+            let encoded_frame = {
+                enc_ctx.send_frame(&av_frame).unwrap();
+                enc_ctx.flush().unwrap();
+
+                let packet = enc_ctx.receive_packet().unwrap();
+                // println!("encoded frame size: {}", packet.data.len());
+
+                EmuEncSoundFrame { buf: packet.data }
+            };
+
+            frame_tx.send(encoded_frame).unwrap();
+
+            frame_idx += 1;
+        }
+    });
+}
+
+fn run_sound_handler(props: &GameProperties, frame_rx: Receiver<EmuEncSoundFrame>) {
+    let frame_output_path = String::from(&props.soundframe_output);
+    assert!(frame_output_path.starts_with("ipc://"));
+
+    thread::spawn(move || {
+        let mut socket = Socket::new(Protocol::Push).unwrap();
+        socket.bind(&frame_output_path).unwrap();
+
+        loop {
+            let frame: EmuEncSoundFrame = frame_rx.recv().unwrap();
+            match socket.nb_write(frame.buf.as_ref()) {
+                Ok(_) => {
+                    // println!("sent frame to nanomsg q: {}", sent);
+                },
+                Err(_) => {
+                    // println!("problem while writing: {}", err);
+                }
+            }
+        }
+    });
 }
 
 fn run_input_handler(props: &GameProperties, mut emu: (impl Emulator + Send + 'static)) {
@@ -277,7 +430,7 @@ fn run_input_handler(props: &GameProperties, mut emu: (impl Emulator + Send + 's
         loop {
             match socket.nb_read(&mut buf) {
                 Ok(bytes_read) => {
-                    println!("read {} bytes", bytes_read);
+                    // println!("read {} bytes", bytes_read);
                     if bytes_read == 4 && buf.len() == 4 {
                         let evt = compose_input_evt_from_buf(&buf);
                         println!("input evt: {:?}", evt);
@@ -296,17 +449,26 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let props = extract_properties_from_args(&args);
 
-    let (encode_tx, encode_rx) = mpsc::sync_channel::<EmuFrame>(CHANNEL_BUF_SIZE);
-    let (frame_tx, frame_rx) = mpsc::sync_channel::<EmuFrame>(CHANNEL_BUF_SIZE);
+    let (image_enc_tx, image_enc_rx) = mpsc::sync_channel::<EmuImageFrame>(CHANNEL_BUF_SIZE);
+    let (image_frame_tx, image_frame_rx) = mpsc::sync_channel::<EmuImageFrame>(CHANNEL_BUF_SIZE);
+
+    let (sound_enc_tx, sound_enc_rx) = mpsc::sync_channel::<EmuSoundFrame>(CHANNEL_BUF_SIZE);
+    let (sound_frame_tx, sound_frame_rx) = mpsc::sync_channel::<EmuEncSoundFrame>(CHANNEL_BUF_SIZE);
+
+    let image_passer = |frame: EmuImageFrame| { image_enc_tx.send(frame).unwrap(); };
+    let sound_passer = |frame: EmuSoundFrame| { sound_enc_tx.send(frame).unwrap(); };
 
     let mut emu = MameEmulator::emulator_instance();
-    emu.set_frame_info(props.resolution.w, props.resolution.h);
+    emu.set_image_frame_info(props.resolution.w, props.resolution.h, props.fps);
+    emu.set_image_frame_cb(image_passer);
+    emu.set_sound_frame_cb(sound_passer);
 
-    let frame_passer = |frame: EmuFrame| { encode_tx.send(frame).unwrap(); };
-    emu.set_frame_callback(frame_passer);
+    run_frame_encoder(&props, image_enc_rx, image_frame_tx);
+    run_frame_handler(&props, image_frame_rx);
 
-    run_frame_encoder(&props, encode_rx, frame_tx);
-    run_frame_handler(&props, frame_rx);
+    run_sound_encoder(&props, sound_enc_rx, sound_frame_tx);
+    run_sound_handler(&props, sound_frame_rx);
+
     run_input_handler(&props, emu.clone());
 
     emu.run(&props.system_name);

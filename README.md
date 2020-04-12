@@ -39,7 +39,7 @@ $ sudo cmake --build . --target install
 
 ```
 $ brew install libvpx
-$ brew install x264
+$ brew install libopusenc
 ```
 
 ### Build
@@ -54,7 +54,8 @@ $ cargo build --release
 ### Run
 ```
 $ DYLD_LIBRARY_PATH=../mame RUST_BACKTRACE=1 cargo run -- \
-    --frame-output ipc://./frames.ipc \
+    --imageframe-output ipc://./imageframes.ipc \
+    --soundframe-output ipc://./soundframes.ipc \
     --key-input ipc://./keys.ipc \
     --resolution 640x480 \
     --fps 30 \

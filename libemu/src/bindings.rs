@@ -707,38 +707,38 @@ fn bindgen_test_layout_mame_input_event_t() {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct mame_frame_t {
+pub struct mame_image_frame_t {
     pub buffer: *mut u8,
     pub buf_size: usize,
 }
 #[test]
-fn bindgen_test_layout_mame_frame_t() {
+fn bindgen_test_layout_mame_image_frame_t() {
     assert_eq!(
-        ::std::mem::size_of::<mame_frame_t>(),
+        ::std::mem::size_of::<mame_image_frame_t>(),
         16usize,
-        concat!("Size of: ", stringify!(mame_frame_t))
+        concat!("Size of: ", stringify!(mame_image_frame_t))
     );
     assert_eq!(
-        ::std::mem::align_of::<mame_frame_t>(),
+        ::std::mem::align_of::<mame_image_frame_t>(),
         8usize,
-        concat!("Alignment of ", stringify!(mame_frame_t))
+        concat!("Alignment of ", stringify!(mame_image_frame_t))
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<mame_frame_t>())).buffer as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<mame_image_frame_t>())).buffer as *const _ as usize },
         0usize,
         concat!(
             "Offset of field: ",
-            stringify!(mame_frame_t),
+            stringify!(mame_image_frame_t),
             "::",
             stringify!(buffer)
         )
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<mame_frame_t>())).buf_size as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<mame_image_frame_t>())).buf_size as *const _ as usize },
         8usize,
         concat!(
             "Offset of field: ",
-            stringify!(mame_frame_t),
+            stringify!(mame_image_frame_t),
             "::",
             stringify!(buf_size)
         )
@@ -746,60 +746,82 @@ fn bindgen_test_layout_mame_frame_t() {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct mame_sound_t {
+pub struct mame_sound_frame_t {
     pub buffer: *const i16,
-    pub buf_size: usize,
+    pub sample_rate: ::std::os::raw::c_int,
+    pub samples: ::std::os::raw::c_int,
+    pub channels: ::std::os::raw::c_int,
 }
 #[test]
-fn bindgen_test_layout_mame_sound_t() {
+fn bindgen_test_layout_mame_sound_frame_t() {
     assert_eq!(
-        ::std::mem::size_of::<mame_sound_t>(),
-        16usize,
-        concat!("Size of: ", stringify!(mame_sound_t))
+        ::std::mem::size_of::<mame_sound_frame_t>(),
+        24usize,
+        concat!("Size of: ", stringify!(mame_sound_frame_t))
     );
     assert_eq!(
-        ::std::mem::align_of::<mame_sound_t>(),
+        ::std::mem::align_of::<mame_sound_frame_t>(),
         8usize,
-        concat!("Alignment of ", stringify!(mame_sound_t))
+        concat!("Alignment of ", stringify!(mame_sound_frame_t))
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<mame_sound_t>())).buffer as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<mame_sound_frame_t>())).buffer as *const _ as usize },
         0usize,
         concat!(
             "Offset of field: ",
-            stringify!(mame_sound_t),
+            stringify!(mame_sound_frame_t),
             "::",
             stringify!(buffer)
         )
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<mame_sound_t>())).buf_size as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<mame_sound_frame_t>())).sample_rate as *const _ as usize },
         8usize,
         concat!(
             "Offset of field: ",
-            stringify!(mame_sound_t),
+            stringify!(mame_sound_frame_t),
             "::",
-            stringify!(buf_size)
+            stringify!(sample_rate)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<mame_sound_frame_t>())).samples as *const _ as usize },
+        12usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(mame_sound_frame_t),
+            "::",
+            stringify!(samples)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<mame_sound_frame_t>())).channels as *const _ as usize },
+        16usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(mame_sound_frame_t),
+            "::",
+            stringify!(channels)
         )
     );
 }
-pub type mame_frame_callback_t = ::std::option::Option<
-    unsafe extern "C" fn(ctx: *mut ::std::os::raw::c_void, frame: mame_frame_t),
+pub type mame_image_frame_cb_t = ::std::option::Option<
+    unsafe extern "C" fn(ctx: *mut ::std::os::raw::c_void, frame: mame_image_frame_t),
 >;
-pub type mame_sound_callback_t = ::std::option::Option<
-    unsafe extern "C" fn(ctx: *mut ::std::os::raw::c_void, sound: mame_sound_t),
+pub type mame_sound_frame_cb_t = ::std::option::Option<
+    unsafe extern "C" fn(ctx: *mut ::std::os::raw::c_void, frame: mame_sound_frame_t),
 >;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct mame_t {
-    pub set_frame_info: ::std::option::Option<
+    pub set_image_frame_info: ::std::option::Option<
         unsafe extern "C" fn(w: ::std::os::raw::c_int, h: ::std::os::raw::c_int),
     >,
-    pub set_frame_cb: ::std::option::Option<
-        unsafe extern "C" fn(ctx: *mut ::std::os::raw::c_void, frame_cb: mame_frame_callback_t),
+    pub set_image_frame_cb: ::std::option::Option<
+        unsafe extern "C" fn(ctx: *mut ::std::os::raw::c_void, frame_cb: mame_image_frame_cb_t),
     >,
-    pub set_sound_cb: ::std::option::Option<
-        unsafe extern "C" fn(ctx: *mut ::std::os::raw::c_void, sound_cb: mame_sound_callback_t),
+    pub set_sound_frame_cb: ::std::option::Option<
+        unsafe extern "C" fn(ctx: *mut ::std::os::raw::c_void, frame_cb: mame_sound_frame_cb_t),
     >,
     pub enqueue_input_event:
         ::std::option::Option<unsafe extern "C" fn(input_event: mame_input_event_t)>,
@@ -820,33 +842,33 @@ fn bindgen_test_layout_mame_t() {
         concat!("Alignment of ", stringify!(mame_t))
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<mame_t>())).set_frame_info as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<mame_t>())).set_image_frame_info as *const _ as usize },
         0usize,
         concat!(
             "Offset of field: ",
             stringify!(mame_t),
             "::",
-            stringify!(set_frame_info)
+            stringify!(set_image_frame_info)
         )
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<mame_t>())).set_frame_cb as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<mame_t>())).set_image_frame_cb as *const _ as usize },
         8usize,
         concat!(
             "Offset of field: ",
             stringify!(mame_t),
             "::",
-            stringify!(set_frame_cb)
+            stringify!(set_image_frame_cb)
         )
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<mame_t>())).set_sound_cb as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<mame_t>())).set_sound_frame_cb as *const _ as usize },
         16usize,
         concat!(
             "Offset of field: ",
             stringify!(mame_t),
             "::",
-            stringify!(set_sound_cb)
+            stringify!(set_sound_frame_cb)
         )
     );
     assert_eq!(
