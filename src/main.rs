@@ -1,12 +1,10 @@
 extern crate libemu;
 
-mod utils;
+mod encoder;
 
 use std::{
     env,
     mem,
-    sync::mpsc::{SyncSender, Receiver},
-    sync::mpsc,
     sync::Arc,
     thread,
     ops::Sub,
@@ -14,8 +12,9 @@ use std::{
 };
 
 use atoi::atoi;
-
 use nanomsg::{Socket, Protocol};
+
+use crossbeam_channel as channel;
 
 use av_data;
 use av_data::pixel::formats::YUV420;
@@ -35,7 +34,9 @@ use libemu::{
     InputKind,
 };
 
-const FRAME_EXPIRE_DURATION: Duration = Duration::from_millis(100);
+use encoder::converter;
+
+const FRAME_EXPIRE_DURATION: Duration = Duration::from_millis(30);
 const CHANNEL_BUF_SIZE: usize = 64;
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -125,8 +126,8 @@ fn now_utc() -> Duration {
 
 fn run_frame_encoder(
     props: &GameProperties,
-    encoder_rx: Receiver<EmuImageFrame>,
-    frame_tx: SyncSender<EmuImageFrame>) {
+    encoder_rx: channel::Receiver<EmuImageFrame>,
+    frame_tx: channel::Sender<EmuImageFrame>) {
 
     let r = props.resolution;
     let fps = props.fps as i64;
@@ -190,7 +191,7 @@ fn run_frame_encoder(
             let mut y = vec![0u8; yuv_size];
             let mut u = vec![0u8; chroma_size];
             let mut v = vec![0u8; chroma_size];
-            utils::bgra_to_yuv420(r.w, r.h, &raw_frame.buf, y.as_mut(), u.as_mut(), v.as_mut());
+            converter::bgra_to_yuv420(r.w, r.h, &raw_frame.buf, y.as_mut(), u.as_mut(), v.as_mut());
             // println!("yuv frame size: y: {}, u: {}, v: {}", y.len(), u.len(), v.len());
 
             let yuv_bufs = [y, u, v];
@@ -240,7 +241,7 @@ fn run_frame_encoder(
     });
 }
 
-fn run_frame_handler(props: &GameProperties, frame_rx: Receiver<EmuImageFrame>) {
+fn run_frame_handler(props: &GameProperties, frame_rx: channel::Receiver<EmuImageFrame>) {
     let frame_output_path = String::from(&props.imageframe_output);
     assert!(frame_output_path.starts_with("ipc://"));
 
@@ -293,8 +294,8 @@ fn copy_interleaved_sound_samples_mono(src: &Vec<i16>, dst_frame: &mut av_data::
 
 fn run_sound_encoder(
     props: &GameProperties,
-    encoder_rx: Receiver<EmuSoundFrame>,
-    frame_tx: SyncSender<EmuEncSoundFrame>) {
+    encoder_rx: channel::Receiver<EmuSoundFrame>,
+    frame_tx: channel::Sender<EmuEncSoundFrame>) {
 
     let fps = props.fps as i64;
 
@@ -387,7 +388,7 @@ fn run_sound_encoder(
     });
 }
 
-fn run_sound_handler(props: &GameProperties, frame_rx: Receiver<EmuEncSoundFrame>) {
+fn run_sound_handler(props: &GameProperties, frame_rx: channel::Receiver<EmuEncSoundFrame>) {
     let frame_output_path = String::from(&props.soundframe_output);
     assert!(frame_output_path.starts_with("ipc://"));
 
@@ -449,11 +450,11 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let props = extract_properties_from_args(&args);
 
-    let (image_enc_tx, image_enc_rx) = mpsc::sync_channel::<EmuImageFrame>(CHANNEL_BUF_SIZE);
-    let (image_frame_tx, image_frame_rx) = mpsc::sync_channel::<EmuImageFrame>(CHANNEL_BUF_SIZE);
+    let (image_enc_tx, image_enc_rx) = channel::bounded(CHANNEL_BUF_SIZE);
+    let (image_frame_tx, image_frame_rx) = channel::bounded(CHANNEL_BUF_SIZE);
 
-    let (sound_enc_tx, sound_enc_rx) = mpsc::sync_channel::<EmuSoundFrame>(CHANNEL_BUF_SIZE);
-    let (sound_frame_tx, sound_frame_rx) = mpsc::sync_channel::<EmuEncSoundFrame>(CHANNEL_BUF_SIZE);
+    let (sound_enc_tx, sound_enc_rx) = channel::bounded(CHANNEL_BUF_SIZE);
+    let (sound_frame_tx, sound_frame_rx) = channel::bounded(CHANNEL_BUF_SIZE);
 
     let image_passer = |frame: EmuImageFrame| { image_enc_tx.send(frame).unwrap(); };
     let sound_passer = |frame: EmuSoundFrame| { sound_enc_tx.send(frame).unwrap(); };
