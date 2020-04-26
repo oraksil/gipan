@@ -132,7 +132,7 @@ impl Emulator for MameEmulator {
             self.mame_inst,
             move |raw_frame: mame_image_frame_t| {
                 if self.should_update_image_frame() {
-                    let buf = unsafe { slice::from_raw_parts(raw_frame.buffer, raw_frame.buf_size) };
+                    let buf = unsafe { slice::from_raw_parts(raw_frame.buffer, raw_frame.buf_size as usize) };
                     callback(EmuImageFrame { buf: Vec::from(buf), timestamp: now_utc(), });
                 }
             }

@@ -22,7 +22,6 @@ pub const __DARWIN_SUF_EXTSN: &'static [u8; 14usize] = b"$DARWIN_EXTSN\0";
 pub const __DARWIN_C_ANSI: u32 = 4096;
 pub const __DARWIN_C_FULL: u32 = 900000;
 pub const __DARWIN_C_LEVEL: u32 = 900000;
-pub const __STDC_WANT_LIB_EXT1__: u32 = 1;
 pub const __DARWIN_NO_LONG_LONG: u32 = 0;
 pub const _DARWIN_FEATURE_64_BIT_INODE: u32 = 1;
 pub const _DARWIN_FEATURE_ONLY_UNIX_CONFORMANCE: u32 = 1;
@@ -76,7 +75,6 @@ pub const INTPTR_MAX: u64 = 9223372036854775807;
 pub const INTPTR_MIN: i64 = -9223372036854775808;
 pub const UINTPTR_MAX: i32 = -1;
 pub const SIZE_MAX: i32 = -1;
-pub const RSIZE_MAX: i32 = -1;
 pub const WINT_MIN: i32 = -2147483648;
 pub const WINT_MAX: u32 = 2147483647;
 pub const SIG_ATOMIC_MIN: i32 = -2147483648;
@@ -661,7 +659,7 @@ pub type user_off_t = i64;
 pub type syscall_arg_t = u_int64_t;
 pub type intmax_t = ::std::os::raw::c_long;
 pub type uintmax_t = ::std::os::raw::c_ulong;
-pub type rsize_t = ::std::os::raw::c_ulong;
+pub type size_t = ::std::os::raw::c_ulong;
 pub type max_align_t = u128;
 pub const mame_input_enum_t_INPUT_KEY_DOWN: mame_input_enum_t = 0;
 pub const mame_input_enum_t_INPUT_KEY_UP: mame_input_enum_t = 1;
@@ -709,7 +707,7 @@ fn bindgen_test_layout_mame_input_event_t() {
 #[derive(Debug, Copy, Clone)]
 pub struct mame_image_frame_t {
     pub buffer: *mut u8,
-    pub buf_size: usize,
+    pub buf_size: size_t,
 }
 #[test]
 fn bindgen_test_layout_mame_image_frame_t() {

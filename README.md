@@ -2,11 +2,11 @@
 Oraksil Gipan
 
 ## Lib
-### Generate C Bindings from Headers
+### Generate C Bindings from Headers (Manually)
 There're too many options when using `bindgen`. Need to deep dive sometime. For now, we need `-x c++` for `bindgen` to understand c++ standard headers or syntax.
 ```
 $ cd libemu
-$ bindgen include/headless.h -o src/bindings.rs -- -x c++
+$ bindgen libemu/include/headless.h -o libemu/src/bindings.rs -- -x c++
 ```
 
 ### Build
