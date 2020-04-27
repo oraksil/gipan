@@ -11,7 +11,8 @@ RUN_ARGS = --imageframe-output ipc://./imageframes.ipc \
     --resolution 480x360 \
     --fps 24 \
     --keyframe-interval 10 \
-    --game dino
+    --game bublbobl
+#    --game dino
 
 build_dbg:
 	cargo build

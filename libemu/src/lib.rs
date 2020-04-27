@@ -10,6 +10,8 @@ use std::time::{SystemTime, Duration, UNIX_EPOCH};
 
 use libc::*;
 
+mod utils;
+
 include!("./bindings.rs");
 
 #[derive(Debug)]
@@ -55,21 +57,24 @@ pub struct MameEmulator {
 unsafe impl Send for MameEmulator {}
 
 impl MameEmulator {
-    pub fn emulator_instance() -> impl Emulator {
+    pub fn create(w: usize, h: usize, fps: usize) -> impl Emulator {
         let mame_inst: *mut mame_t = unsafe { get_mame_instance() };
-        MameEmulator {
+        let mut emu = MameEmulator {
             mame_inst: mame_inst,
             fps: 24,
-            last_updated: now_utc(),
-        }
+            last_updated: utils::time::now_utc(),
+        };
+
+        emu.set_image_frame_info(w, h, fps);
+        emu
     }
 
     fn should_update_image_frame(&mut self) -> bool {
         let frame_ms = Duration::from_millis((1000 / self.fps) as u64);
-        let delta = now_utc().sub(self.last_updated);
+        let delta = utils::time::now_utc().sub(self.last_updated);
         let should_update = delta >= frame_ms;
         if should_update {
-            self.last_updated = now_utc();
+            self.last_updated = utils::time::now_utc();
         }
         should_update
     }
@@ -112,10 +117,6 @@ where F: FnMut(mame_sound_frame_t), {
     callback(frame);
 }
 
-fn now_utc() -> Duration {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
-}
-
 impl Emulator for MameEmulator {
     fn set_image_frame_info(&mut self, w: usize, h: usize, fps: usize) {
         self.fps = fps;
@@ -133,7 +134,10 @@ impl Emulator for MameEmulator {
             move |raw_frame: mame_image_frame_t| {
                 if self.should_update_image_frame() {
                     let buf = unsafe { slice::from_raw_parts(raw_frame.buffer, raw_frame.buf_size as usize) };
-                    callback(EmuImageFrame { buf: Vec::from(buf), timestamp: now_utc(), });
+                    callback(EmuImageFrame {
+                        buf: Vec::from(buf),
+                        timestamp: utils::time::now_utc(),
+                    });
                 }
             }
         );
@@ -154,7 +158,7 @@ impl Emulator for MameEmulator {
                     sample_rate: raw_frame.sample_rate as usize,
                     samples: samples,
                     channels: channels,
-                    timestamp: now_utc(),
+                    timestamp: utils::time::now_utc(),
                 });
             }
         );

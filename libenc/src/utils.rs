@@ -34,5 +34,42 @@ pub mod converter {
             v => v as u8,
         }
     }
+}
 
+pub mod copy {
+    use std::mem;
+
+    // fn copy_interleaved_sound_samples(src: &[i16], dst_frame: &mut av_data::frame::Frame) {
+    //     let samples = src.len() / 2;
+
+    //     let l = {
+    //         let buf = dst_frame.buf.as_mut_slice_inner(0).unwrap();
+    //         unsafe { mem::transmute::<&mut [u8], &mut [i16]>(buf) }
+    //     };
+    //     let r = {
+    //         let buf = dst_frame.buf.as_mut_slice_inner(1).unwrap();
+    //         unsafe { mem::transmute::<&mut [u8], &mut [i16]>(buf) }
+    //     };
+    //     for i in 0..samples {
+    //         l[i] = src[i*2];
+    //         r[i] = src[i*2+1];
+    //     }
+    // }
+
+    pub fn copy_interleaved_sound_samples_mono(src: &[i16], dst_buf: &mut [u8]) {
+        let samples = src.len() / 2;
+
+        let b = unsafe { mem::transmute::<&mut [u8], &mut [i16]>(dst_buf) };
+        for i in 0..samples {
+            b[i] = src[i*2];
+        }
+    }
+}
+
+pub mod time {
+    use std::time::{SystemTime, Duration, UNIX_EPOCH};
+
+    pub fn now_utc() -> Duration {
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
+    }
 }
