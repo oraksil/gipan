@@ -8,9 +8,9 @@ MAME_HOME = ../mame
 RUN_ARGS = --imageframe-output ipc://./imageframes.ipc \
     --soundframe-output ipc://./soundframes.ipc \
     --key-input ipc://./keys.ipc \
-    --resolution 480x360 \
+    --resolution 640x480 \
     --fps 24 \
-    --keyframe-interval 10 \
+    --keyframe-interval 12 \
     --game bublbobl
 #    --game dino
 

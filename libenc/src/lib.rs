@@ -1,3 +1,4 @@
+use std::ptr;
 use std::sync::Arc;
 use std::ops::Sub;
 use std::time::Duration;
@@ -8,6 +9,7 @@ use av_codec::common::CodecList;
 
 use libvpx::encoder::VP9_DESCR;
 use libopus::encoder::OPUS_DESCR;
+use x264;
 
 mod utils;
 
@@ -295,5 +297,109 @@ impl Encoder for OpusEncoder {
             buf: encoded_packet.data,
             timestamp: frame.timestamp,
         })
+    }
+}
+
+pub struct H264Encoder {
+    w: usize,
+    h: usize,
+    fps: usize,
+    keyframe_interval: usize,
+
+    enc_ctx: x264::Encoder,
+
+    frame_index: i64,
+    encoded_frame_count: i64,
+}
+
+unsafe impl Send for H264Encoder {}
+
+impl H264Encoder {
+    pub fn create(w: usize, h: usize, fps: usize, keyframe_interval: usize) -> impl Encoder {
+        H264Encoder {
+            w: w,
+            h: h,
+            fps: fps,
+            keyframe_interval: keyframe_interval,
+            enc_ctx: H264Encoder::create_ctx(w, h, fps),
+            frame_index: 0,
+            encoded_frame_count: 0
+        }
+    }
+
+    fn encoder_params(&self) -> x264::Param {
+        H264Encoder::create_enc_params(self.w, self.h)
+    }
+
+    fn create_enc_params(w: usize, h: usize) -> x264::Param {
+        // https://obsproject.com/forum/resources/low-latency-high-performance-x264-options-for-for-most-streaming-services-youtube-facebook.726/
+        x264::Param::default_preset("veryfast", "zerolatency").unwrap()
+            .set_dimension(h, w)
+            .param_parse("bframes", "6").unwrap()
+            .param_parse("b-adapt", "0").unwrap()
+            .param_parse("partitions", "none").unwrap()
+            .param_parse("scenecut", "0").unwrap()
+            .param_parse("no-weightb", "1").unwrap()
+            .param_parse("weightp", "0").unwrap()
+            .param_parse("sliced-threads", "1").unwrap()
+            .param_parse("sync-lookahead", "3").unwrap()
+            .param_parse("no-deblock", "1").unwrap()
+            .param_parse("aq-mode", "0").unwrap()
+            .param_parse("subme", "0").unwrap()
+            .apply_profile("baseline").unwrap()
+    }
+
+    fn create_ctx(w: usize, h: usize, fps: usize) -> x264::Encoder {
+        let mut params = H264Encoder::create_enc_params(w, h);
+        x264::Encoder::open(&mut params).unwrap()
+    }
+}
+
+impl Encoder for H264Encoder {
+    fn encode_audio(&mut self, _frame: &AudioFrame) -> Result<EncodedFrame, String> {
+        unimplemented!();
+    }
+
+    fn encode_video(&mut self, frame: &VideoFrame) -> Result<EncodedFrame, String> {
+        // skip encoding for expired frame
+        let now = utils::time::now_utc();
+        let expired = now.sub(FRAME_EXPIRE_DURATION);
+        if frame.timestamp < expired {
+            self.frame_index += 1;
+            return Err(format!("raw frame is decayed, dropping.. {:?} < {:?}", frame.timestamp, expired));
+        }
+
+        let yuv_size = self.w * self.h;
+        let chroma_size = yuv_size / 4;
+
+        let mut y = vec![0u8; yuv_size];
+        let mut u = vec![0u8; chroma_size];
+        let mut v = vec![0u8; chroma_size];
+        utils::converter::bgra_to_yuv420(self.w, self.h, &frame.buf, &mut y, &mut u, &mut v);
+
+        let params = self.encoder_params();
+        let mut pic = x264::Picture::from_param(&params).unwrap()
+            .set_timestamp(self.frame_index);
+
+        unsafe {
+            ptr::copy(y.as_ptr(), pic.as_mut_slice(0).unwrap().as_mut_ptr(), yuv_size);
+            ptr::copy(u.as_ptr(), pic.as_mut_slice(1).unwrap().as_mut_ptr(), chroma_size);
+            ptr::copy(v.as_ptr(), pic.as_mut_slice(2).unwrap().as_mut_ptr(), chroma_size);
+        };
+
+        match self.enc_ctx.encode(&pic) {
+            Ok(Some((nal, _, _))) => {
+                let encoded = Vec::from(nal.as_bytes());
+
+                self.frame_index += 1;
+                self.encoded_frame_count += 1;
+
+                Ok(EncodedFrame { buf: encoded, timestamp: frame.timestamp, })
+            },
+
+            _ => {
+                Err(format!("failed to encode frame.."))
+            }
+        }
     }
 }

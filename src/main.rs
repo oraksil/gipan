@@ -94,7 +94,10 @@ fn run_frame_encoder(
     encoder_rx: channel::Receiver<libemu::EmuImageFrame>,
     frame_tx: channel::Sender<libenc::EncodedFrame>) {
 
-    let mut vp9_enc = libenc::Vp9Encoder::create(
+    // let mut vid_enc = libenc::Vp9Encoder::create(
+    //     props.resolution.w, props.resolution.h, props.fps, props.keyframe_interval);
+
+    let mut vid_enc = libenc::H264Encoder::create(
         props.resolution.w, props.resolution.h, props.fps, props.keyframe_interval);
 
     thread::spawn(move || {
@@ -103,7 +106,7 @@ fn run_frame_encoder(
             // println!("raw frame size: {}", raw_frame.buf.len());
 
             let frame = libenc::VideoFrame::from(&raw_frame.buf, raw_frame.timestamp);
-            match vp9_enc.encode_video(&frame) {
+            match vid_enc.encode_video(&frame) {
                 Ok(encoded) => {
                     frame_tx.send(encoded).unwrap();
                 },
@@ -122,6 +125,7 @@ fn run_frame_handler(props: &GameProperties, frame_rx: channel::Receiver<libenc:
 
     thread::spawn(move || {
         let mut socket = Socket::new(Protocol::Push).unwrap();
+        socket.set_send_buffer_size(4096 * 1024).unwrap();
         socket.bind(&frame_output_path).unwrap();
 
         loop {
