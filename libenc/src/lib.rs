@@ -306,6 +306,7 @@ pub struct H264Encoder {
     fps: usize,
     keyframe_interval: usize,
 
+    enc_params: x264::Param,
     enc_ctx: x264::Encoder,
 
     frame_index: i64,
@@ -316,19 +317,19 @@ unsafe impl Send for H264Encoder {}
 
 impl H264Encoder {
     pub fn create(w: usize, h: usize, fps: usize, keyframe_interval: usize) -> impl Encoder {
+        let mut enc_params = H264Encoder::create_enc_params(w, h, keyframe_interval);
+        let enc_ctx = x264::Encoder::open(&mut enc_params).unwrap();
+
         H264Encoder {
             w: w,
             h: h,
             fps: fps,
             keyframe_interval: keyframe_interval,
-            enc_ctx: H264Encoder::create_ctx(w, h, fps, keyframe_interval),
+            enc_params: enc_params,
+            enc_ctx: enc_ctx,
             frame_index: 0,
             encoded_frame_count: 0
         }
-    }
-
-    fn encoder_params(&self) -> x264::Param {
-        H264Encoder::create_enc_params(self.w, self.h, self.keyframe_interval)
     }
 
     fn create_enc_params(w: usize, h: usize, kf_interval: usize) -> x264::Param {
@@ -348,11 +349,6 @@ impl H264Encoder {
             .param_parse("aq-mode", "0").unwrap()
             .param_parse("subme", "0").unwrap()
             .apply_profile("baseline").unwrap()
-    }
-
-    fn create_ctx(w: usize, h: usize, fps: usize, kf_interval: usize) -> x264::Encoder {
-        let mut params = H264Encoder::create_enc_params(w, h, kf_interval);
-        x264::Encoder::open(&mut params).unwrap()
     }
 }
 
@@ -378,8 +374,7 @@ impl Encoder for H264Encoder {
         let mut v = vec![0u8; chroma_size];
         utils::converter::bgra_to_yuv420(self.w, self.h, &frame.buf, &mut y, &mut u, &mut v);
 
-        let params = self.encoder_params();
-        let mut pic = x264::Picture::from_param(&params).unwrap()
+        let mut pic = x264::Picture::from_param(&self.enc_params).unwrap()
             .set_timestamp(self.frame_index);
 
         unsafe {
