@@ -321,27 +321,28 @@ impl H264Encoder {
             h: h,
             fps: fps,
             keyframe_interval: keyframe_interval,
-            enc_ctx: H264Encoder::create_ctx(w, h, fps),
+            enc_ctx: H264Encoder::create_ctx(w, h, fps, keyframe_interval),
             frame_index: 0,
             encoded_frame_count: 0
         }
     }
 
     fn encoder_params(&self) -> x264::Param {
-        H264Encoder::create_enc_params(self.w, self.h)
+        H264Encoder::create_enc_params(self.w, self.h, self.keyframe_interval)
     }
 
-    fn create_enc_params(w: usize, h: usize) -> x264::Param {
+    fn create_enc_params(w: usize, h: usize, kf_interval: usize) -> x264::Param {
         // https://obsproject.com/forum/resources/low-latency-high-performance-x264-options-for-for-most-streaming-services-youtube-facebook.726/
         x264::Param::default_preset("veryfast", "zerolatency").unwrap()
             .set_dimension(h, w)
-            .param_parse("bframes", "6").unwrap()
+            .param_parse("sliced-threads", "1").unwrap()
+            .param_parse("keyint", &kf_interval.to_string()).unwrap()
+            .param_parse("bframes", "2").unwrap()
             .param_parse("b-adapt", "0").unwrap()
-            .param_parse("partitions", "none").unwrap()
             .param_parse("scenecut", "0").unwrap()
+            .param_parse("partitions", "none").unwrap()
             .param_parse("no-weightb", "1").unwrap()
             .param_parse("weightp", "0").unwrap()
-            .param_parse("sliced-threads", "1").unwrap()
             .param_parse("sync-lookahead", "3").unwrap()
             .param_parse("no-deblock", "1").unwrap()
             .param_parse("aq-mode", "0").unwrap()
@@ -349,8 +350,8 @@ impl H264Encoder {
             .apply_profile("baseline").unwrap()
     }
 
-    fn create_ctx(w: usize, h: usize, fps: usize) -> x264::Encoder {
-        let mut params = H264Encoder::create_enc_params(w, h);
+    fn create_ctx(w: usize, h: usize, fps: usize, kf_interval: usize) -> x264::Encoder {
+        let mut params = H264Encoder::create_enc_params(w, h, kf_interval);
         x264::Encoder::open(&mut params).unwrap()
     }
 }
