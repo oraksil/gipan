@@ -11,8 +11,17 @@ RUN_ARGS = --imageframe-output ipc://./imageframes.ipc \
     --resolution 640x480 \
     --fps 24 \
     --keyframe-interval 12 \
-    --game bublbobl
+    --game mslug5
+#    --game tekken3
 #    --game dino
+#    --game wwfsstarua
+#    --game s1945iii
+#    --game ffightu
+#    --game hsf2
+#    --game bublbobl
+#    --game kof97pls
+#		 --game ddsomu
+#		 --game suprslam
 
 build_dbg:
 	cargo build

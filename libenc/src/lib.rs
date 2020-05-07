@@ -334,20 +334,34 @@ impl H264Encoder {
 
     fn create_enc_params(w: usize, h: usize, kf_interval: usize) -> x264::Param {
         // https://obsproject.com/forum/resources/low-latency-high-performance-x264-options-for-for-most-streaming-services-youtube-facebook.726/
-        x264::Param::default_preset("veryfast", "zerolatency").unwrap()
+        x264::Param::default_preset("ultrafast", "zerolatency").unwrap()
             .set_dimension(h, w)
             .param_parse("sliced-threads", "1").unwrap()
             .param_parse("keyint", &kf_interval.to_string()).unwrap()
-            .param_parse("bframes", "2").unwrap()
-            .param_parse("b-adapt", "0").unwrap()
-            .param_parse("scenecut", "0").unwrap()
-            .param_parse("partitions", "none").unwrap()
-            .param_parse("no-weightb", "1").unwrap()
-            .param_parse("weightp", "0").unwrap()
-            .param_parse("sync-lookahead", "3").unwrap()
-            .param_parse("no-deblock", "1").unwrap()
-            .param_parse("aq-mode", "0").unwrap()
-            .param_parse("subme", "0").unwrap()
+            // - overriding on ultrafast preset
+            // .param_parse("bframes", "2").unwrap()
+            // .param_parse("b-adapt", "0").unwrap()
+            // .param_parse("scenecut", "0").unwrap()
+            // .param_parse("partitions", "none").unwrap()
+            // .param_parse("no-weightb", "1").unwrap()
+            // .param_parse("weightp", "0").unwrap()
+            // .param_parse("sync-lookahead", "3").unwrap()
+            // .param_parse("no-deblock", "1").unwrap()
+            // .param_parse("aq-mode", "0").unwrap()
+            // .param_parse("subme", "0").unwrap()
+
+            // - option 1. 1 pass with crf
+            .param_parse("pass", "1").unwrap()
+            .param_parse("crf", "32").unwrap()
+
+            // - option 2. abr + vbv
+            // .param_parse("pass", "1").unwrap()
+            // .param_parse("vbv-maxrate", "800").unwrap()
+            // .param_parse("vbv-bufsize", "1000").unwrap()
+
+            // - option 3. cbr
+            .param_parse("nal-hrd", "cbr").unwrap()
+            .param_parse("bitrate", "500").unwrap()
             .apply_profile("baseline").unwrap()
     }
 }
