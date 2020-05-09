@@ -337,7 +337,10 @@ impl H264Encoder {
         x264::Param::default_preset("ultrafast", "zerolatency").unwrap()
             .set_dimension(h, w)
             .param_parse("sliced-threads", "1").unwrap()
+            // .param_parse("interlaced", "1").unwrap()
             .param_parse("keyint", &kf_interval.to_string()).unwrap()
+            .param_parse("min-keyint", &kf_interval.to_string()).unwrap()
+
             // - overriding on ultrafast preset
             // .param_parse("bframes", "2").unwrap()
             // .param_parse("b-adapt", "0").unwrap()
@@ -349,19 +352,22 @@ impl H264Encoder {
             // .param_parse("no-deblock", "1").unwrap()
             // .param_parse("aq-mode", "0").unwrap()
             // .param_parse("subme", "0").unwrap()
+            // .param_parse("no-cabac", "1").unwrap()
 
-            // - option 1. 1 pass with crf
+            // - rate control option 1. 1 pass with crf
             .param_parse("pass", "1").unwrap()
-            .param_parse("crf", "32").unwrap()
+            .param_parse("crf", "29").unwrap()
 
-            // - option 2. abr + vbv
-            // .param_parse("pass", "1").unwrap()
-            // .param_parse("vbv-maxrate", "800").unwrap()
-            // .param_parse("vbv-bufsize", "1000").unwrap()
+            // - rate control option 2. abr + vbv
+            // .param_parse("pass", "2").unwrap()
+            .param_parse("vbv-maxrate", "400").unwrap()
+            .param_parse("vbv-bufsize", "400").unwrap()
 
-            // - option 3. cbr
-            .param_parse("nal-hrd", "cbr").unwrap()
-            .param_parse("bitrate", "500").unwrap()
+            // - rate control option 3. cbr
+            // .param_parse("nal-hrd", "cbr").unwrap()
+            // .param_parse("bitrate", "400").unwrap()
+            // .param_parse("force-cfr", "1").unwrap()
+            // .param_parse("level", "3.0").unwrap()
             .apply_profile("baseline").unwrap()
     }
 }
@@ -390,6 +396,7 @@ impl Encoder for H264Encoder {
 
         let mut pic = x264::Picture::from_param(&self.enc_params).unwrap()
             .set_timestamp(self.frame_index);
+        self.frame_index += 1;
 
         unsafe {
             ptr::copy(y.as_ptr(), pic.as_mut_slice(0).unwrap().as_mut_ptr(), yuv_size);
@@ -401,14 +408,17 @@ impl Encoder for H264Encoder {
             Ok(Some((nal, _, _))) => {
                 let encoded = Vec::from(nal.as_bytes());
 
-                self.frame_index += 1;
                 self.encoded_frame_count += 1;
 
                 Ok(EncodedFrame { buf: encoded, timestamp: frame.timestamp, })
             },
 
-            _ => {
-                Err(format!("failed to encode frame.."))
+            Ok(None) => {
+                Err(format!("nothing encoded.."))
+            }
+
+            Err(e) => {
+                Err(format!("failed to encode frame.. {}", e))
             }
         }
     }
