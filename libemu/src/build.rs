@@ -16,6 +16,6 @@ fn main() {
         .expect("Couldn't write bindings!");
 
     const MAME_HOME: &str = "../mame";
-    println!("cargo:rustc-link-lib=dylib=mame64d");
+    println!("cargo:rustc-link-lib=dylib=mame64");
     println!("cargo:rustc-link-search=native={}", MAME_HOME);
  }
