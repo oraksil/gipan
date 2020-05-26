@@ -92,33 +92,9 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.53.3"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c72a978d268b1d70b0e963217e60fdabd9523a941457a6c42a7315d15c7e89e5"
-dependencies = [
- "bitflags",
- "cexpr",
- "cfg-if",
- "clang-sys",
- "clap",
- "env_logger",
- "lazy_static",
- "lazycell",
- "log",
- "peeking_take_while",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash",
- "shlex",
- "which",
-]
-
-[[package]]
-name = "bindgen"
-version = "0.54.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66c0bb6167449588ff70803f4127f0684f9063097eca5016f37eb52b92c2cf36"
+checksum = "f1c85344eb535a31b62f0af37be84441ba9e7f0f4111eb0530f43d15e513fe57"
 dependencies = [
  "bitflags",
  "cexpr",
@@ -167,9 +143,9 @@ dependencies = [
 
 [[package]]
 name = "cexpr"
-version = "0.4.0"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4aedb84272dbe89af497cf81375129abda4fc0a9e7c5d317498c15cc30c0d27"
+checksum = "fce5b5fb86b0c57c20c834c1b412fd09c77c8a59b9473f86272709e78874cd1d"
 dependencies = [
  "nom",
 ]
@@ -182,9 +158,9 @@ checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
 
 [[package]]
 name = "clang-sys"
-version = "0.29.3"
+version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe6837df1d5cba2397b835c8530f51723267e16abbf83892e9e5af4f0e5dd10a"
+checksum = "81de550971c976f176130da4b2978d3b524eaa0fd9ac31f3ceb5ae1231fb4853"
 dependencies = [
  "glob",
  "libc",
@@ -333,15 +309,15 @@ checksum = "b294d6fa9ee409a054354afc4352b0b9ef7ca222c69b8812cbea9e7d2bf3783f"
 
 [[package]]
 name = "libc"
-version = "0.2.70"
+version = "0.2.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3baa92041a6fec78c687fa0cc2b3fae8884f743d672cf551bed1d6dac6988d0f"
+checksum = "9457b06509d27052635f90d6466700c65095fdf75409b3fbdd903e988b886f49"
 
 [[package]]
 name = "libemu"
 version = "0.1.0"
 dependencies = [
- "bindgen 0.53.3",
+ "bindgen",
  "bytes",
  "cc",
  "libc",
@@ -373,7 +349,7 @@ dependencies = [
 [[package]]
 name = "libopus"
 version = "0.1.0"
-source = "git+https://github.com/rust-av/opus-rs.git#6d7413995b352c2650a76b94401e21f4c0263b44"
+source = "git+https://github.com/rust-av/opus-rs.git?rev=9f72023#9f72023564624ac0abbf3700e059016cdf8273cb"
 dependencies = [
  "av-bitstream",
  "av-codec",
@@ -384,7 +360,7 @@ dependencies = [
 [[package]]
 name = "libvpx"
 version = "0.1.0"
-source = "git+https://github.com/sangwonl/vpx-rs.git#a02626d1e0aa7b2164b66607b4dda3e9ad39a212"
+source = "git+https://github.com/rust-av/vpx-rs.git?rev=f2ddb04#f2ddb045cb9205010e3fac2924a855d831441b0a"
 dependencies = [
  "av-codec",
  "av-data",
@@ -447,12 +423,12 @@ dependencies = [
 
 [[package]]
 name = "nom"
-version = "5.1.1"
+version = "4.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b471253da97532da4b61552249c521e01e736071f71c1a4f7ebbfbf0a06aad6"
+checksum = "2ad2a91a8e869eeb30b9cb3119ae87773a8f4ae617f41b1eb9c154b2905f7bd6"
 dependencies = [
  "memchr",
- "version_check",
+ "version_check 0.1.5",
 ]
 
 [[package]]
@@ -511,9 +487,9 @@ dependencies = [
 [[package]]
 name = "opus-sys"
 version = "0.1.0"
-source = "git+https://github.com/rust-av/opus-rs.git#6d7413995b352c2650a76b94401e21f4c0263b44"
+source = "git+https://github.com/rust-av/opus-rs.git?rev=9f72023#9f72023564624ac0abbf3700e059016cdf8273cb"
 dependencies = [
- "bindgen 0.54.0",
+ "bindgen",
  "metadeps",
 ]
 
@@ -539,7 +515,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
- "version_check",
+ "version_check 0.9.2",
 ]
 
 [[package]]
@@ -552,7 +528,7 @@ dependencies = [
  "quote",
  "syn",
  "syn-mid",
- "version_check",
+ "version_check 0.9.2",
 ]
 
 [[package]]
@@ -713,6 +689,12 @@ checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
 
 [[package]]
 name = "version_check"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "914b1a6776c4c929a602fafd8bc742e06365d4bcbe48c30f9cca5824f70dc9dd"
+
+[[package]]
+name = "version_check"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5a972e5669d67ba988ce3dc826706fb0a8b01471c088cb0b6110b805cc36aed"
@@ -720,9 +702,9 @@ checksum = "b5a972e5669d67ba988ce3dc826706fb0a8b01471c088cb0b6110b805cc36aed"
 [[package]]
 name = "vpx-sys"
 version = "0.1.0"
-source = "git+https://github.com/sangwonl/vpx-rs.git#a02626d1e0aa7b2164b66607b4dda3e9ad39a212"
+source = "git+https://github.com/rust-av/vpx-rs.git?rev=f2ddb04#f2ddb045cb9205010e3fac2924a855d831441b0a"
 dependencies = [
- "bindgen 0.53.3",
+ "bindgen",
  "metadeps",
 ]
 
@@ -769,7 +751,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 [[package]]
 name = "x264"
 version = "0.1.0"
-source = "git+https://github.com/rust-av/x264-rs.git#1888666c42183cfc6c1226905b32087ed361acf1"
+source = "git+https://github.com/rust-av/x264-rs.git?rev=f0e45fe#f0e45feef193a674fcbd78b6c61a94173862ea2b"
 dependencies = [
  "x264-sys",
 ]
@@ -777,8 +759,8 @@ dependencies = [
 [[package]]
 name = "x264-sys"
 version = "0.2.0"
-source = "git+https://github.com/rust-av/x264-rs.git#1888666c42183cfc6c1226905b32087ed361acf1"
+source = "git+https://github.com/rust-av/x264-rs.git?rev=f0e45fe#f0e45feef193a674fcbd78b6c61a94173862ea2b"
 dependencies = [
- "bindgen 0.54.0",
+ "bindgen",
  "metadeps",
 ]

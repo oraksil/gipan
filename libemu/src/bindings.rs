@@ -362,7 +362,6 @@ pub const SIZE_WIDTH: u32 = 64;
 pub const WCHAR_WIDTH: u32 = 32;
 pub const WINT_WIDTH: u32 = 32;
 pub const _GLIBCXX_CSTDDEF: u32 = 1;
-pub type std_size_t = ::std::os::raw::c_ulong;
 pub type std_nullptr_t = *const ::std::os::raw::c_void;
 pub type __u_char = ::std::os::raw::c_uchar;
 pub type __u_short = ::std::os::raw::c_ushort;
@@ -463,7 +462,6 @@ pub type uint_fast32_t = ::std::os::raw::c_ulong;
 pub type uint_fast64_t = ::std::os::raw::c_ulong;
 pub type intmax_t = __intmax_t;
 pub type uintmax_t = __uintmax_t;
-pub type size_t = ::std::os::raw::c_ulong;
 #[repr(C)]
 #[repr(align(16))]
 #[derive(Debug, Copy, Clone)]
@@ -555,7 +553,7 @@ fn bindgen_test_layout_mame_input_event_t() {
 #[derive(Debug, Copy, Clone)]
 pub struct mame_image_frame_t {
     pub buffer: *mut u8,
-    pub buf_size: size_t,
+    pub buf_size: usize,
 }
 #[test]
 fn bindgen_test_layout_mame_image_frame_t() {
