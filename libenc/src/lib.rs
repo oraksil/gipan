@@ -300,6 +300,7 @@ impl Encoder for OpusEncoder {
     }
 }
 
+#[allow(dead_code)]
 pub struct H264Encoder {
     w: usize,
     h: usize,
@@ -334,32 +335,46 @@ impl H264Encoder {
 
     fn create_enc_params(w: usize, h: usize, kf_interval: usize) -> x264::Param {
         // https://obsproject.com/forum/resources/low-latency-high-performance-x264-options-for-for-most-streaming-services-youtube-facebook.726/
-        x264::Param::default_preset("ultrafast", "zerolatency").unwrap()
+        // x264::Param::default_preset("zerolatency", "ultrafast").unwrap()
+        x264::Param::new()
             .set_dimension(h, w)
-            .param_parse("sliced-threads", "1").unwrap()
             // .param_parse("interlaced", "1").unwrap()
             .param_parse("keyint", &kf_interval.to_string()).unwrap()
             .param_parse("min-keyint", &kf_interval.to_string()).unwrap()
 
-            // - overriding on ultrafast preset
-            // .param_parse("bframes", "2").unwrap()
-            // .param_parse("b-adapt", "0").unwrap()
-            // .param_parse("scenecut", "0").unwrap()
-            // .param_parse("partitions", "none").unwrap()
-            // .param_parse("no-weightb", "1").unwrap()
-            // .param_parse("weightp", "0").unwrap()
-            // .param_parse("sync-lookahead", "3").unwrap()
-            // .param_parse("no-deblock", "1").unwrap()
-            // .param_parse("aq-mode", "0").unwrap()
-            // .param_parse("subme", "0").unwrap()
-            // .param_parse("no-cabac", "1").unwrap()
+            // - manual preset params for ultrafast
+            .param_parse("bframes", "0").unwrap()
+            .param_parse("aq-mode", "0").unwrap()
+            .param_parse("b-adapt", "0").unwrap()
+            .param_parse("no-8x8dct", "1").unwrap()
+            .param_parse("no-cabac", "1").unwrap()
+            .param_parse("no-deblock", "1").unwrap()
+            .param_parse("no-mbtree", "1").unwrap()
+            .param_parse("no-mixed-refs", "1").unwrap()
+            .param_parse("no-weightb", "1").unwrap()
+            .param_parse("partitions", "none").unwrap()
+            .param_parse("rc-lookahead", "0").unwrap()
+            .param_parse("ref", "1").unwrap()
+            .param_parse("scenecut", "0").unwrap()
+            .param_parse("trellis", "0").unwrap()
+            .param_parse("me", "dia").unwrap()
+            .param_parse("subme", "0").unwrap()
+            .param_parse("weightp", "0").unwrap()
+
+            // - manual tune params for zerolatency
+            .param_parse("bframes", "0").unwrap()
+            .param_parse("rc-lookahead", "0").unwrap()
+            .param_parse("sync-lookahead", "0").unwrap()
+            .param_parse("sliced-threads", "1").unwrap()
+            .param_parse("no-mbtree", "1").unwrap()
+            .param_parse("force-cfr", "1").unwrap()
 
             // - rate control option 1. 1 pass with crf
             .param_parse("pass", "1").unwrap()
             .param_parse("crf", "29").unwrap()
 
             // - rate control option 2. abr + vbv
-            // .param_parse("pass", "2").unwrap()
+            // .param_parse("force-cfr", "0").unwrap()
             .param_parse("vbv-maxrate", "400").unwrap()
             .param_parse("vbv-bufsize", "400").unwrap()
 

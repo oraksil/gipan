@@ -1,4 +1,4 @@
-SILENT = @
+# SILENT = @
 
 TARGET_DBG = ./target/debug/gipan
 TARGET_REL = ./target/release/gipan
@@ -11,9 +11,10 @@ RUN_ARGS = --imageframe-output ipc://./imageframes.ipc \
     --resolution 480x320 \
     --fps 20 \
     --keyframe-interval 250 \
-    --game mslug5
+    --game tekken3
+
+#    --game mslug5
 #    --game bublbobl
-#    --game tekken3
 #    --game s1945iii
 #    --game dino
 #    --game hsf2
@@ -21,7 +22,7 @@ RUN_ARGS = --imageframe-output ipc://./imageframes.ipc \
 #    --game ffightu
 #    --game kof97pls
 #    --game dynamcop
-#		 --game suprslam
+#    --game suprslam
 
 build_dbg:
 	cargo build
@@ -34,3 +35,4 @@ run_dbg: build_dbg
 
 run_rel: build_rel
 	LD_LIBRARY_PATH=$(MAME_HOME) $(TARGET_REL) $(RUN_ARGS)
+
