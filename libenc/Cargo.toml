@@ -12,6 +12,6 @@ av-data = "0.2"
 av-codec = "0.2"
 av-format = "0.2"
 
-libvpx = { git = "https://github.com/rust-av/vpx-rs.git", features = ["codec-trait"] }
+libvpx = { git = "https://github.com/sangwonl/vpx-rs.git", features = ["codec-trait"] }
 libopus = { git = "https://github.com/rust-av/opus-rs.git", features = ["codec-trait"] }
 x264 = { git = "https://github.com/rust-av/x264-rs.git" }
