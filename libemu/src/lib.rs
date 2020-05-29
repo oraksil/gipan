@@ -7,6 +7,7 @@ use std::slice;
 use std::mem;
 use std::ops::Sub;
 use std::time::{SystemTime, Duration, UNIX_EPOCH};
+use std::ffi::CString;
 
 use libc::*;
 
@@ -181,7 +182,7 @@ impl Emulator for MameEmulator {
     }
 
     fn run(&self, system_name: &str) -> i32 {
-        let sys_name = String::from(system_name);
+        let sys_name = CString::new(system_name).unwrap();
         unsafe {
             match (*self.mame_inst).run {
                 Some(f) => f(sys_name.as_ptr() as *const c_char),

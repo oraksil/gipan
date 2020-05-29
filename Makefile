@@ -4,25 +4,15 @@ TARGET_DBG = ./target/debug/gipan
 TARGET_REL = ./target/release/gipan
 
 MAME_HOME = ../mame
+GAME = dino
 
 RUN_ARGS = --imageframe-output ipc://./imageframes.ipc \
     --soundframe-output ipc://./soundframes.ipc \
     --key-input ipc://./keys.ipc \
     --resolution 480x320 \
-    --fps 20 \
-    --keyframe-interval 250 \
-    --game tekken3
-
-#    --game mslug5
-#    --game bublbobl
-#    --game s1945iii
-#    --game dino
-#    --game hsf2
-#    --game ddsomu
-#    --game ffightu
-#    --game kof97pls
-#    --game dynamcop
-#    --game suprslam
+    --fps 23 \
+    --keyframe-interval 48 \
+    --game $(GAME)
 
 build_dbg:
 	cargo build

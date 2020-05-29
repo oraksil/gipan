@@ -375,8 +375,8 @@ impl H264Encoder {
 
             // - rate control option 2. abr + vbv
             // .param_parse("force-cfr", "0").unwrap()
-            .param_parse("vbv-maxrate", "400").unwrap()
-            .param_parse("vbv-bufsize", "400").unwrap()
+            .param_parse("vbv-maxrate", "800").unwrap()
+            .param_parse("vbv-bufsize", "800").unwrap()
 
             // - rate control option 3. cbr
             // .param_parse("nal-hrd", "cbr").unwrap()
