@@ -2,7 +2,7 @@ extern crate libemu;
 extern crate libenc;
 
 use std::{env, thread};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use std::sync::{Arc, RwLock};
 
 use atoi::atoi;
@@ -283,18 +283,23 @@ fn main() {
         props.resolution.h,
         props.fps);
 
-    let is_idle = || {
+    let handle_idle = || {
+        let mut is_idle = false;
         if let Ok(c) = ctx.read() {
-            (*c).is_key_input_in_idle(props.idle_time_to_enc_sleep)
-        } else {
-            false
+            is_idle = (*c).is_key_input_in_idle(props.idle_time_to_enc_sleep)
         }
+
+        if is_idle {
+            thread::sleep(Duration::from_secs(1));
+        }
+
+        is_idle
     };
     emu.set_image_frame_cb(|f: libemu::EmuImageFrame| { 
-        if !is_idle() { img_enc_tx.send(f).unwrap(); }
+        if !handle_idle() { img_enc_tx.send(f).unwrap(); }
     });
     emu.set_sound_frame_cb(|f: libemu::EmuSoundFrame| {
-        if !is_idle() { snd_enc_tx.send(f).unwrap(); }
+        if !handle_idle() { snd_enc_tx.send(f).unwrap(); }
     });
 
     run_frame_encoder(&props, img_enc_rx, img_frame_tx);
