@@ -12,6 +12,7 @@ RUN_ARGS = --imageframe-output ipc://./imageframes.ipc \
     --resolution 480x320 \
     --fps 23 \
     --keyframe-interval 48 \
+    --idle-time-to-enc-sleep 10 \
     --game $(GAME)
 
 build_dbg:
