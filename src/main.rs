@@ -2,7 +2,7 @@ extern crate libemu;
 extern crate libenc;
 
 use std::{env, thread};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use std::sync::{Arc, RwLock};
 
 use atoi::atoi;
@@ -40,15 +40,16 @@ struct GameProperties {
 
 struct GameContext {
     last_key_input_ts: Instant,
+    idle_threshold: i32,
 }
 
 impl GameContext {
-    fn is_key_input_in_idle(&self, threshold: i32) -> bool {
-        if threshold <= 0 {
+    fn is_key_input_in_idle(&self) -> bool {
+        if self.idle_threshold <= 0 {
             false
         } else {
             let elapsed = self.last_key_input_ts.elapsed();
-            elapsed.as_secs() > threshold as u64
+            elapsed.as_secs() > self.idle_threshold as u64
         }
     }
 }
@@ -131,8 +132,8 @@ fn run_frame_encoder(
                 Ok(encoded) => {
                     frame_tx.send(encoded).unwrap();
                 },
-                Err(msg) => {
-                    println!("{}", msg);
+                Err(_) => {
+                    // println!("{}", msg);
                 }
             }
 
@@ -158,8 +159,8 @@ fn run_frame_handler(
                 Ok(_) => {
                     // println!("sent frame to nanomsg q: {}", sent);
                 },
-                Err(err) => {
-                    println!("problem while writing: {}", err);
+                Err(_) => {
+                    // println!("problem while writing: {}", err);
                 }
             }
         }
@@ -185,8 +186,8 @@ fn run_sound_encoder(
                 Ok(encoded) => {
                     frame_tx.send(encoded).unwrap();
                 },
-                Err(msg) => {
-                    println!("{}", msg);
+                Err(_) => {
+                    // println!("{}", msg);
                 }
             }
 
@@ -226,23 +227,39 @@ fn run_input_handler(
 
     let key_input_path = String::from(&props.key_input);
 
-    fn compose_input_evt_from_buf(b: &[u8]) -> libemu::EmuInputEvent {
-        let evt_value = atoi(&b[0..3]).unwrap();
-        let evt_type = match &b[3] {
-            b'd' => libemu::InputKind::INPUT_KEY_DOWN,
-            b'u' => libemu::InputKind::INPUT_KEY_UP,
-            _ => libemu::InputKind::INPUT_KEY_DOWN,
-        };
-        libemu::EmuInputEvent { value: evt_value, kind: evt_type }
-    }
-
-    let update_last_key_input_ts = move || {
-        if let Ok(mut c) = ctx.write() {
-            (*c).last_key_input_ts = Instant::now();
-        }
-    };
-
     thread::spawn(move || {
+        let compose_input_evt_from_buf = |b: &[u8]| -> libemu::EmuInputEvent {
+            let evt_value = atoi(&b[0..3]).unwrap();
+            let evt_type = match &b[3] {
+                b'd' => libemu::InputKind::INPUT_KEY_DOWN,
+                b'u' => libemu::InputKind::INPUT_KEY_UP,
+                _ => libemu::InputKind::INPUT_KEY_DOWN,
+            };
+            libemu::EmuInputEvent { value: evt_value, kind: evt_type }
+        };
+
+        let mut handle_key_input = |buf: &[u8]| {
+            // parse buf and put input to emu
+            let evt = compose_input_evt_from_buf(&buf);
+            println!("input evt: {:?}", evt);
+            emu.put_input_event(evt);
+
+            // update last_key_input_ts
+            if let Ok(mut c) = ctx.write() {
+                (*c).last_key_input_ts = Instant::now();
+            }
+
+            // pause or resume asl idle state
+            if let Ok(c) = ctx.read() {
+                if (*c).is_key_input_in_idle() {
+                    emu.pause();
+                } else {
+                    emu.resume();
+                }
+            }
+        };
+
+
         let mut socket = Socket::new(Protocol::Pull).unwrap();
         socket.bind(&key_input_path).unwrap();
 
@@ -252,17 +269,15 @@ fn run_input_handler(
                 Ok(bytes_read) => {
                     // println!("read {} bytes", bytes_read);
                     if bytes_read == 4 && buf.len() == 4 {
-                        let evt = compose_input_evt_from_buf(&buf);
-                        println!("input evt: {:?}", evt);
-                        emu.put_input_event(evt);
-
-                        update_last_key_input_ts();
+                        handle_key_input(&buf);
                     }
                 },
                 Err(_) => {
                     // println!("problem while reading: {}", err);
                 }
             }
+
+
         };
     });
 }
@@ -270,7 +285,10 @@ fn run_input_handler(
 fn main() {
     let args: Vec<String> = env::args().collect();
     let props = extract_properties_from_args(&args);
-    let ctx = Arc::new(RwLock::new(GameContext { last_key_input_ts: Instant::now(), }));
+    let ctx = Arc::new(RwLock::new(GameContext {
+        last_key_input_ts: Instant::now(),
+        idle_threshold: props.idle_time_to_enc_sleep,
+    }));
 
     let (img_enc_tx, img_enc_rx) = channel::bounded(CHANNEL_BUF_SIZE);
     let (img_frame_tx, img_frame_rx) = channel::bounded(CHANNEL_BUF_SIZE);
@@ -284,16 +302,10 @@ fn main() {
         props.fps);
 
     let handle_idle = || {
-        let mut is_idle = false;
         if let Ok(c) = ctx.read() {
-            is_idle = (*c).is_key_input_in_idle(props.idle_time_to_enc_sleep)
+            return (*c).is_key_input_in_idle()
         }
-
-        if is_idle {
-            thread::sleep(Duration::from_secs(1));
-        }
-
-        is_idle
+        false
     };
     emu.set_image_frame_cb(|f: libemu::EmuImageFrame| { 
         if !handle_idle() { img_enc_tx.send(f).unwrap(); }

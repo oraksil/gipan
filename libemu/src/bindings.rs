@@ -672,12 +672,14 @@ pub struct mame_t {
     pub run: ::std::option::Option<
         unsafe extern "C" fn(system_name: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int,
     >,
+    pub pause: ::std::option::Option<unsafe extern "C" fn()>,
+    pub resume: ::std::option::Option<unsafe extern "C" fn()>,
 }
 #[test]
 fn bindgen_test_layout_mame_t() {
     assert_eq!(
         ::std::mem::size_of::<mame_t>(),
-        40usize,
+        56usize,
         concat!("Size of: ", stringify!(mame_t))
     );
     assert_eq!(
@@ -733,6 +735,26 @@ fn bindgen_test_layout_mame_t() {
             stringify!(mame_t),
             "::",
             stringify!(run)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<mame_t>())).pause as *const _ as usize },
+        40usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(mame_t),
+            "::",
+            stringify!(pause)
+        )
+    );
+    assert_eq!(
+        unsafe { &(*(::std::ptr::null::<mame_t>())).resume as *const _ as usize },
+        48usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(mame_t),
+            "::",
+            stringify!(resume)
         )
     );
 }

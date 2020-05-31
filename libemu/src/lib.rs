@@ -46,6 +46,8 @@ pub trait Emulator: Clone + Send {
     fn set_sound_frame_cb(&mut self, callback: impl FnMut(EmuSoundFrame));
     fn put_input_event(&mut self, event: EmuInputEvent);
     fn run(&self, system_name: &str) -> i32;
+    fn pause(&self);
+    fn resume(&self);
 }
 
 #[derive(Clone)]
@@ -187,6 +189,24 @@ impl Emulator for MameEmulator {
             match (*self.mame_inst).run {
                 Some(f) => f(sys_name.as_ptr() as *const c_char),
                 None => panic!("run method is not implemented.")
+            }
+        }
+    }
+
+    fn pause(&self) {
+        unsafe {
+            match (*self.mame_inst).pause {
+                Some(f) => f(),
+                None => panic!("pause method is not implemented.")
+            }
+        }
+    }
+
+    fn resume(&self) {
+        unsafe {
+            match (*self.mame_inst).resume {
+                Some(f) => f(),
+                None => panic!("resume method is not implemented.")
             }
         }
     }
