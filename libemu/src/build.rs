@@ -15,7 +15,7 @@ fn main() {
         .write_to_file(PathBuf::from("src/bindings.rs"))
         .expect("Couldn't write bindings!");
 
-    const MAME_HOME: &str = "../mame";
+    const MAME_HOME: &str = "./mame";
     println!("cargo:rustc-link-lib=dylib=mame64");
     println!("cargo:rustc-link-search=native={}", MAME_HOME);
  }
