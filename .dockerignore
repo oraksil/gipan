@@ -1,0 +1,9 @@
+.git
+.idea
+.vscode
+
+# build output
+target
+
+# nanomsg
+*.ipc

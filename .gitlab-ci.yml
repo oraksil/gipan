@@ -4,33 +4,24 @@ variables:
   REPO: gitlab.com
   GROUP: oraksil
   PROJECT: gipan
-  NANOMSG_SRC_PATH: $CI_PROJECT_DIR/3rdparty/nanomsg
-  OPUS_SRC_PATH: $CI_PROJECT_DIR/3rdparty/opus
-  MAME_HOME: $CI_PROJECT_DIR/mame
   CARGO_HOME: $CI_PROJECT_DIR/.cargo
   BUILD_HOME: $CI_PROJECT_DIR/target
+  MAME_HOME: $CI_PROJECT_DIR/mame 
 
 stages:
   - test
 
 cache:
   paths:
-    - $NANOMSG_SRC_PATH
-    - $OPUS_SRC_PATH
     - $MAME_HOME
     - $CARGO_HOME
     - $BUILD_HOME
 
 before_script:
   - apt -y update
-  - apt install -y build-essential cmake git clang
-
-  - if [ ! -d $NANOMSG_SRC_PATH ]; then git clone https://github.com/nanomsg/nanomsg.git $NANOMSG_SRC_PATH; fi
-  - cd $NANOMSG_SRC_PATH && cmake . && cmake --build . && cmake --build . --target install && cd -
-  
-  - apt install -y libx264-dev libvpx-dev
-  - if [ ! -d $OPUS_SRC_PATH ]; then mkdir -p $OPUS_SRC_PATH; wget -qO- https://archive.mozilla.org/pub/opus/opus-1.3.1.tar.gz | tar xvfz - -C $OPUS_SRC_PATH --strip-components 1; fi
-  - cd $OPUS_SRC_PATH && ./configure && make && make install && cd -
+  - apt install -y cmake clang
+  - apt install -y libx264-dev libvpx-dev libopus-dev nanomsg-utils
+  - ln -s libnanomsg.so.5 /usr/lib/x86_64-linux-gnu/libnanomsg.so
   
   - if [ ! -f $MAME_HOME/libmame64.so ]; then wget https://oraksil.s3.ap-northeast-2.amazonaws.com/etc/libmame64.so -P $MAME_HOME; fi
 
