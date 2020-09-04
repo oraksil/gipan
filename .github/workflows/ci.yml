@@ -45,7 +45,7 @@ jobs:
     - name: Set up 3rd-party libs
       run: |
         sudo apt -y update
-        sudo apt install -y build-essential git cmake clang libx264-dev libvpx-dev
+        sudo apt install -y build-essential git cmake clang libx264-dev libvpx-dev qt5-default
 
         if [ ! -d $OPUS_BUILD_HOME ]; then
           mkdir -p $OPUS_BUILD_HOME; wget -qO- https://archive.mozilla.org/pub/opus/opus-1.3.1.tar.gz | tar xvfz - -C $OPUS_BUILD_HOME --strip-components 1;
