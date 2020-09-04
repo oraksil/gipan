@@ -25,6 +25,12 @@ jobs:
         OPUS_BUILD_HOME: ${{ env.GITHUB_WORKSPACE }}/3rdparty/libopus
         NANOMSG_BUILD_HOME: ${{ env.GITHUB_WORKSPACE }}/3rdparty/libnanomsg
 
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+
+    - uses: actions/checkout@v2
+
     - name: Cache
       uses: actions/cache@v2.1.1
       with:
@@ -51,12 +57,6 @@ jobs:
         fi
         cd $NANOMSG_BUILD_HOME && cmake . && cmake --build . && sudo cmake --build . --target install && cd -
   
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-
-    - uses: actions/checkout@v2
-
     - name: Download mame lib
       run: |
         if [ ! -f $MAME_HOME/libmame64.so ]; then
