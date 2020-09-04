@@ -20,23 +20,15 @@ jobs:
     - name: Set environment variables
       uses: allenevans/set-env@v1.0.0
       with:
-        APP_TARGET_HOME: ${{ env.GITHUB_WORKSPACE }}/target
-        MAME_HOME: ${{ env.GITHUB_WORKSPACE }}/mame
-        OPUS_BUILD_HOME: ${{ env.GITHUB_WORKSPACE }}/3rdparty/libopus
-        NANOMSG_BUILD_HOME: ${{ env.GITHUB_WORKSPACE }}/3rdparty/libnanomsg
-
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-
-    - uses: actions/checkout@v2
+        MAME_HOME: ${{ env.HOME }}/mame
+        OPUS_BUILD_HOME: ${{ env.HOME }}/3rdparty/libopus
+        NANOMSG_BUILD_HOME: ${{ env.HOME }}/3rdparty/libnanomsg
 
     - name: Cache
       uses: actions/cache@v2.1.1
       with:
         path: |
           ${{ env.CARGO_HOME }}
-          ${{ env.APP_TARGET_HOME }}
           ${{ env.MAME_HOME }}
           ${{ env.OPUS_BUILD_HOME }}
           ${{ env.NANOMSG_BUILD_HOME }}
@@ -45,7 +37,7 @@ jobs:
     - name: Set up 3rd-party libs
       run: |
         sudo apt -y update
-        sudo apt install -y build-essential git cmake clang libx264-dev libvpx-dev qt5-default
+        sudo apt install -y build-essential git cmake clang libx264-dev libvpx-dev qt5-default libsdl2-dev
 
         if [ ! -d $OPUS_BUILD_HOME ]; then
           mkdir -p $OPUS_BUILD_HOME; wget -qO- https://archive.mozilla.org/pub/opus/opus-1.3.1.tar.gz | tar xvfz - -C $OPUS_BUILD_HOME --strip-components 1;
@@ -62,6 +54,16 @@ jobs:
         if [ ! -f $MAME_HOME/libmame64.so ]; then
             wget https://oraksil.s3.ap-northeast-2.amazonaws.com/etc/libmame64.so -P $MAME_HOME;
         fi
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+
+    - uses: actions/checkout@v2
+
+    - name: Copy libmame64 to checked out dir
+      run: |
+        cp $MAME_HOME/libmame64.so $GITHUB_WORKSPACE/mame/
 
     - name: Build
       run: cargo build
