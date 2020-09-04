@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always    
+
+jobs:
+  build:
+    name: Test
+    runs-on: ubuntu-18.04
+
+    steps:
+    - uses: Actions-R-Us/default-env@v1
+
+    - name: Set environment variables
+      uses: allenevans/set-env@v1.0.0
+      with:
+        MAME_HOME: ${{ env.HOME }}/mame
+        OPUS_BUILD_HOME: ${{ env.HOME }}/3rdparty/libopus
+        NANOMSG_BUILD_HOME: ${{ env.HOME }}/3rdparty/libnanomsg
+
+    - name: Cache
+      uses: actions/cache@v2.1.1
+      with:
+        path: |
+          ${{ env.CARGO_HOME }}
+          ${{ env.MAME_HOME }}
+          ${{ env.OPUS_BUILD_HOME }}
+          ${{ env.NANOMSG_BUILD_HOME }}
+        key: prebuilt-bins
+
+    - name: Set up 3rd-party libs
+      run: |
+        sudo apt -y update
+        sudo apt install -y build-essential git cmake clang libx264-dev libvpx-dev qt5-default libsdl2-dev
+
+        if [ ! -d $OPUS_BUILD_HOME ]; then
+          mkdir -p $OPUS_BUILD_HOME; wget -qO- https://archive.mozilla.org/pub/opus/opus-1.3.1.tar.gz | tar xvfz - -C $OPUS_BUILD_HOME --strip-components 1;
+        fi
+        cd $OPUS_BUILD_HOME && pwd && ./configure && make && sudo make install && cd -
+
+        if [ ! -d $NANOMSG_BUILD_HOME ]; then
+          git clone https://github.com/nanomsg/nanomsg.git $NANOMSG_BUILD_HOME;
+        fi
+        cd $NANOMSG_BUILD_HOME && cmake . && cmake --build . && sudo cmake --build . --target install && cd -
+  
+    - name: Download mame lib
+      run: |
+        if [ ! -f $MAME_HOME/libmame64.so ]; then
+            wget https://oraksil.s3.ap-northeast-2.amazonaws.com/etc/libmame64.so -P $MAME_HOME;
+        fi
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+
+    - uses: actions/checkout@v2
+
+    - name: Copy libmame64 to checked out dir
+      run: |
+        cp $MAME_HOME/libmame64.so $GITHUB_WORKSPACE/mame/
+
+    - name: Build
+      run: cargo build
+
+    - name: Test
+      run: cargo test
+
