@@ -6,14 +6,15 @@ TARGET_REL = ./target/release/gipan
 MAME_HOME = ../mame
 GAME = dino
 
-RUN_ARGS = --imageframe-output ipc://./imageframes.ipc \
-    --soundframe-output ipc://./soundframes.ipc \
-    --key-input ipc://./keys.ipc \
-    --resolution 480x320 \
-    --fps 23 \
-    --keyframe-interval 48 \
-    --idle-time-to-enc-sleep 10 \
-    --game $(GAME)
+RUN_ARGS = \
+	--imageframe-output tcp://127.0.0.1:8765 \
+	--soundframe-output tcp://127.0.0.1:8766 \
+	--key-input tcp://127.0.0.1:8767 \
+ 	--resolution 480x320 \
+	--fps 23 \
+	--keyframe-interval 48 \
+	--idle-time-to-enc-sleep 100 \
+	--game $(GAME)
 
 build_dbg:
 	cargo build

@@ -74,8 +74,8 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
     props.resolution = Resolution::from_size(480, 320);
     props.fps = 30;
     props.keyframe_interval = 12;
-    props.imageframe_output = String::from("ipc://./imageframes.ipc");
-    props.soundframe_output = String::from("ipc://./soundframes.ipc");
+    props.imageframe_output = String::from("ipc://./images.ipc");
+    props.soundframe_output = String::from("ipc://./sounds.ipc");
     props.idle_time_to_enc_sleep = 0;
 
     for (i, arg) in args.iter().map(|s| s.as_str()).enumerate() {
@@ -152,7 +152,6 @@ fn run_frame_handler(
     frame_rx: channel::Receiver<libenc::EncodedFrame>) {
         
     let frame_output_path = String::from(&props.imageframe_output);
-    assert!(frame_output_path.starts_with("ipc://"));
 
     thread::spawn(move || {
         let mut socket = Socket::new(Protocol::Push).unwrap();
@@ -199,7 +198,6 @@ fn run_sound_handler(
     frame_rx: channel::Receiver<libenc::EncodedFrame>) {
 
     let frame_output_path = String::from(&props.soundframe_output);
-    assert!(frame_output_path.starts_with("ipc://"));
 
     thread::spawn(move || {
         let mut socket = Socket::new(Protocol::Push).unwrap();
