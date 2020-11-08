@@ -5,8 +5,8 @@ LD_LIBRARY_PATH=$APP_HOME/mame \
   --imageframe-output $IPC_IMAGE_FRAMES \
   --soundframe-output $IPC_SOUND_FRAMES \
   --key-input $IPC_KEY_INPUTS \
-  --resolution 480x320 \
-  --fps 23 \
-  --keyframe-interval 80 \
-  --idle-time-to-enc-sleep 10 \
+  --resolution 640x480 \
+  --fps 25 \
+  --keyframe-interval 150 \
+  --idle-time-to-enc-sleep 300 \
   --game $GAME
