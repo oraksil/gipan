@@ -13,7 +13,6 @@ RUN_ARGS = \
  	--resolution 480x320 \
 	--fps 23 \
 	--keyframe-interval 48 \
-	--idle-time-to-enc-sleep 100 \
 	--game $(GAME)
 
 build_dbg:
