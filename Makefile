@@ -9,7 +9,7 @@ GAME = dino
 RUN_ARGS = \
 	--imageframe-output tcp://127.0.0.1:8765 \
 	--soundframe-output tcp://127.0.0.1:8766 \
-	--key-input tcp://127.0.0.1:8767 \
+	--cmd-input tcp://127.0.0.1:8767 \
  	--resolution 480x320 \
 	--fps 23 \
 	--keyframe-interval 48 \

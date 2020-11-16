@@ -1,15 +1,17 @@
 extern crate libemu;
-extern crate libenc;
+
+extern crate serde;
 
 use std::io::{Read, Write};
-use std::{env, thread};
+use std::{env, thread, str};
 
-use atoi::atoi;
 use nanomsg::{Socket, Protocol};
 use crossbeam_channel as channel;
 
 use libemu::Emulator;
 use libenc::Encoder;
+
+use serde::{Deserialize};
 
 const CHANNEL_BUF_SIZE: usize = 64;
 
@@ -33,7 +35,7 @@ struct GameProperties {
     system_name: String,
     imageframe_output: String,
     soundframe_output: String,
-    key_input: String,
+    cmd_input: String,
 }
 
 fn parse_resolution(arg: String) -> (usize, usize) {
@@ -51,8 +53,9 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
     props.resolution = Resolution::from_size(480, 320);
     props.fps = 30;
     props.keyframe_interval = 12;
-    props.imageframe_output = String::from("ipc://./images.ipc");
-    props.soundframe_output = String::from("ipc://./sounds.ipc");
+    props.imageframe_output = String::from("tcp://127.0.0.1:8765");
+    props.soundframe_output = String::from("tcp://127.0.0.1:8766");
+    props.cmd_input = String::from("tcp://127.0.0.1:8767");
 
     for (i, arg) in args.iter().map(|s| s.as_str()).enumerate() {
         let next_arg = || { args[i+1].clone() };
@@ -66,8 +69,8 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
             "--soundframe-output" => {
                 props.soundframe_output = next_arg()
             },
-            "--key-input" => {
-                props.key_input = next_arg()
+            "--cmd-input" => {
+                props.cmd_input = next_arg()
             },
             "--fps" => {
                 props.fps = next_arg().parse().unwrap()
@@ -183,38 +186,60 @@ fn run_sound_handler(
     });
 }
 
-fn run_input_handler(
-    props: &GameProperties,
-    mut emu: (impl libemu::Emulator + Send + 'static)) {
+// Command Specification
+// 'key'
+//   - args[0]: string of key input (ex, 053d) 
+// 'ctrl'
+//   - args[0]: string for stream control (ex, pause / resume)
+#[derive(Deserialize, Debug)]
+struct Command {
+  cmd: String,
+  args: Vec<String>,
+}
 
-    let key_input_path = String::from(&props.key_input);
+fn run_cmd_handler(
+    props: &GameProperties,
+    emu: (impl libemu::Emulator + Send + 'static)) {
+
+    let cmd_input_path = String::from(&props.cmd_input);
 
     thread::spawn(move || {
-        let compose_input_evt_from_buf = |b: &[u8]| -> libemu::EmuInputEvent {
-            let evt_value = atoi(&b[0..3]).unwrap();
-            let evt_type = match &b[3] {
-                b'd' => libemu::InputKind::INPUT_KEY_DOWN,
-                b'u' => libemu::InputKind::INPUT_KEY_UP,
-                _ => libemu::InputKind::INPUT_KEY_DOWN,
-            };
-            libemu::EmuInputEvent { value: evt_value, kind: evt_type }
-        };
-
-        let mut handle_key_input = |buf: &[u8]| {
+        let handle_cmd_key = |args: &Vec<String>| {
             // parse buf and put input to emu
-            let evt = compose_input_evt_from_buf(&buf);
-            println!("input evt: {:?}", evt);
-            emu.put_input_event(evt);
+            let input_str = &args[0];
+            emu.put_input_event(libemu::EmuInputEvent {
+                value: input_str[0..3].parse::<u8>().unwrap(),
+                kind: match &input_str[3..] {
+                    "d" => libemu::InputKind::INPUT_KEY_DOWN,
+                    "u" => libemu::InputKind::INPUT_KEY_UP,
+                    _ => libemu::InputKind::INPUT_KEY_DOWN,
+                }
+            });
         };
 
-        let mut socket = Socket::new(Protocol::Pull).unwrap();
-        socket.bind(&key_input_path).unwrap();
+        let handle_cmd_ctrl = |args: &Vec<String>| {
+            let ctrl_val = &args[0];
+            match &ctrl_val[..] {
+                "pause" => emu.pause(),
+                "resume" => emu.resume(),
+                _ => println!("ctrl val: {}", &args[0]),
+            }
+        };
 
-        let mut buf = [0u8; 4];
+        // connect to cmd input queue, then polling and handling cmd
+        let mut socket = Socket::new(Protocol::Pull).unwrap();
+        socket.bind(&cmd_input_path).unwrap();
+
+        let mut buf = [0u8; 1024];
         loop {
             let bytes_read = socket.read(&mut buf).unwrap();
-            if bytes_read == 4 {
-                handle_key_input(&buf);
+            let json_str = str::from_utf8(&buf[0..bytes_read]).unwrap();
+            let command: Command = serde_json::from_str(&json_str).unwrap();
+
+            match &command.cmd[..] {
+                "key" => handle_cmd_key(&command.args),
+                "ctrl" => handle_cmd_ctrl(&command.args),
+                _ => println!("not supported cmd"),
             }
         };
     });
@@ -241,7 +266,7 @@ fn main() {
     run_sound_encoder(&props, snd_enc_rx, snd_frame_tx);
     run_sound_handler(&props, snd_frame_rx);
 
-    run_input_handler(&props, emu.clone());
+    run_cmd_handler(&props, emu.clone());
 
     emu.run(&props.system_name);
 }
