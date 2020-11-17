@@ -1,17 +1,17 @@
 extern crate libemu;
-extern crate libenc;
+
+extern crate serde;
 
 use std::io::{Read, Write};
-use std::{env, thread};
-use std::time::{Duration, Instant};
-use std::sync::{Arc, RwLock};
+use std::{env, thread, str};
 
-use atoi::atoi;
 use nanomsg::{Socket, Protocol};
 use crossbeam_channel as channel;
 
 use libemu::Emulator;
 use libenc::Encoder;
+
+use serde::{Deserialize};
 
 const CHANNEL_BUF_SIZE: usize = 64;
 
@@ -35,28 +35,7 @@ struct GameProperties {
     system_name: String,
     imageframe_output: String,
     soundframe_output: String,
-    key_input: String,
-    idle_time_to_enc_sleep: i32,        // in secs
-}
-
-struct GameContext {
-    last_key_input_ts: Instant,
-    idle_threshold: i32,
-}
-
-impl GameContext {
-    fn update_last_key_input_ts(&mut self) {
-        self.last_key_input_ts = Instant::now();
-    }
-
-    fn is_key_input_in_idle(&self) -> bool {
-        if self.idle_threshold <= 0 {
-            false
-        } else {
-            let elapsed = self.last_key_input_ts.elapsed();
-            elapsed.as_secs() > self.idle_threshold as u64
-        }
-    }
+    cmd_input: String,
 }
 
 fn parse_resolution(arg: String) -> (usize, usize) {
@@ -76,7 +55,7 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
     props.keyframe_interval = 12;
     props.imageframe_output = String::from("ipc://./images.ipc");
     props.soundframe_output = String::from("ipc://./sounds.ipc");
-    props.idle_time_to_enc_sleep = 0;
+    props.cmd_input = String::from("ipc://./cmds.ipc");
 
     for (i, arg) in args.iter().map(|s| s.as_str()).enumerate() {
         let next_arg = || { args[i+1].clone() };
@@ -90,8 +69,8 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
             "--soundframe-output" => {
                 props.soundframe_output = next_arg()
             },
-            "--key-input" => {
-                props.key_input = next_arg()
+            "--cmd-input" => {
+                props.cmd_input = next_arg()
             },
             "--fps" => {
                 props.fps = next_arg().parse().unwrap()
@@ -103,9 +82,6 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
                 let (w, h) = parse_resolution(next_arg());
                 props.resolution = Resolution::from_size(w, h);
             },
-            "--idle-time-to-enc-sleep" => {
-                props.idle_time_to_enc_sleep = next_arg().parse().unwrap()
-            }
             _ => {
                 if arg.starts_with("--") {
                     panic!("invalid args have been passed");
@@ -210,74 +186,68 @@ fn run_sound_handler(
     });
 }
 
-fn run_input_handler(
-    props: &GameProperties,
-    ctx: Arc<RwLock<GameContext>>,
-    mut emu: (impl libemu::Emulator + Send + 'static)) {
-
-    let key_input_path = String::from(&props.key_input);
-
-    thread::spawn(move || {
-        let compose_input_evt_from_buf = |b: &[u8]| -> libemu::EmuInputEvent {
-            let evt_value = atoi(&b[0..3]).unwrap();
-            let evt_type = match &b[3] {
-                b'd' => libemu::InputKind::INPUT_KEY_DOWN,
-                b'u' => libemu::InputKind::INPUT_KEY_UP,
-                _ => libemu::InputKind::INPUT_KEY_DOWN,
-            };
-            libemu::EmuInputEvent { value: evt_value, kind: evt_type }
-        };
-
-        let mut handle_key_input = |buf: &[u8]| {
-            // parse buf and put input to emu
-            let evt = compose_input_evt_from_buf(&buf);
-            println!("input evt: {:?}", evt);
-            emu.put_input_event(evt);
-
-            // update last_key_input_ts
-            let mut mut_ctx = ctx.write().unwrap();
-            mut_ctx.update_last_key_input_ts();
-        };
-
-        let mut socket = Socket::new(Protocol::Pull).unwrap();
-        socket.bind(&key_input_path).unwrap();
-
-        let mut buf = [0u8; 4];
-        loop {
-            let bytes_read = socket.read(&mut buf).unwrap();
-            if bytes_read == 4 {
-                handle_key_input(&buf);
-            }
-        };
-    });
+// Command Specification
+// 'key'
+//   - args[0]: string of key input (ex, 053d) 
+// 'ctrl'
+//   - args[0]: string for stream control (ex, pause / resume)
+#[derive(Deserialize, Debug)]
+struct Command {
+  cmd: String,
+  args: Vec<String>,
 }
 
-fn run_input_idle_checker(
-    ctx: Arc<RwLock<GameContext>>,
+fn run_cmd_handler(
+    props: &GameProperties,
     emu: (impl libemu::Emulator + Send + 'static)) {
 
-    thread::spawn(move || {
-        loop {
-            thread::sleep(Duration::from_secs(1));
+    let cmd_input_path = String::from(&props.cmd_input);
 
-            // pause or resume asl idle state
-            if ctx.read().unwrap().is_key_input_in_idle() {
-                emu.pause();
-            } else {
-                emu.resume();
+    thread::spawn(move || {
+        let handle_cmd_key = |args: &Vec<String>| {
+            // parse buf and put input to emu
+            let input_str = &args[0];
+            emu.put_input_event(libemu::EmuInputEvent {
+                value: input_str[0..3].parse::<u8>().unwrap(),
+                kind: match &input_str[3..] {
+                    "d" => libemu::InputKind::INPUT_KEY_DOWN,
+                    "u" => libemu::InputKind::INPUT_KEY_UP,
+                    _ => libemu::InputKind::INPUT_KEY_DOWN,
+                }
+            });
+        };
+
+        let handle_cmd_ctrl = |args: &Vec<String>| {
+            let ctrl_val = &args[0];
+            match &ctrl_val[..] {
+                "pause" => emu.pause(),
+                "resume" => emu.resume(),
+                _ => println!("ctrl val: {}", &args[0]),
             }
-        }
+        };
+
+        // connect to cmd input queue, then polling and handling cmd
+        let mut socket = Socket::new(Protocol::Pull).unwrap();
+        socket.bind(&cmd_input_path).unwrap();
+
+        let mut buf = [0u8; 1024];
+        loop {
+            let bytes_read = socket.read(&mut buf).unwrap();
+            let json_str = str::from_utf8(&buf[0..bytes_read]).unwrap();
+            let command: Command = serde_json::from_str(&json_str).unwrap();
+
+            match &command.cmd[..] {
+                "key" => handle_cmd_key(&command.args),
+                "ctrl" => handle_cmd_ctrl(&command.args),
+                _ => println!("not supported cmd"),
+            }
+        };
     });
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     let props = extract_properties_from_args(&args);
-
-    let ctx = Arc::new(RwLock::new(GameContext {
-        last_key_input_ts: Instant::now(),
-        idle_threshold: props.idle_time_to_enc_sleep,
-    }));
 
     let mut emu = libemu::MameEmulator::create(
         props.resolution.w,
@@ -296,8 +266,7 @@ fn main() {
     run_sound_encoder(&props, snd_enc_rx, snd_frame_tx);
     run_sound_handler(&props, snd_frame_rx);
 
-    run_input_handler(&props, ctx.clone(), emu.clone());
-    run_input_idle_checker(ctx.clone(), emu.clone());
+    run_cmd_handler(&props, emu.clone());
 
     emu.run(&props.system_name);
 }

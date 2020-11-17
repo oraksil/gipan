@@ -44,7 +44,7 @@ pub trait Emulator: Clone + Send {
     fn set_image_frame_info(&mut self, w: usize, h: usize, fps: usize);
     fn set_image_frame_cb(&mut self, callback: impl FnMut(EmuImageFrame));
     fn set_sound_frame_cb(&mut self, callback: impl FnMut(EmuSoundFrame));
-    fn put_input_event(&mut self, event: EmuInputEvent);
+    fn put_input_event(&self, event: EmuInputEvent);
     fn run(&self, system_name: &str) -> i32;
     fn pause(&self);
     fn resume(&self);
@@ -167,7 +167,7 @@ impl Emulator for MameEmulator {
         );
     }
 
-    fn put_input_event(&mut self, event: EmuInputEvent) {
+    fn put_input_event(&self, event: EmuInputEvent) {
         let mame_input = mame_input_event_t {
             key: event.value,
             type_: match event.kind {

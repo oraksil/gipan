@@ -15,14 +15,11 @@ jobs:
     runs-on: ubuntu-18.04
 
     steps:
-    - uses: Actions-R-Us/default-env@v1
-
-    - name: Set environment variables
-      uses: allenevans/set-env@v1.0.0
-      with:
-        MAME_HOME: ${{ env.HOME }}/mame
-        OPUS_BUILD_HOME: ${{ env.HOME }}/3rdparty/libopus
-        NANOMSG_BUILD_HOME: ${{ env.HOME }}/3rdparty/libnanomsg
+    - name: Set the values
+      run: |
+        echo "MAME_HOME=$HOME/mame" >> $GITHUB_ENV
+        echo "OPUS_BUILD_HOME=$HOME/3rdparty/libopus" >> $GITHUB_ENV
+        echo "NANOMSG_BUILD_HOME=$HOME/3rdparty/libnanomsg" >> $GITHUB_ENV
 
     - name: Cache
       uses: actions/cache@v2.1.1
