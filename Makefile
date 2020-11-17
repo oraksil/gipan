@@ -7,10 +7,10 @@ MAME_HOME = ../mame
 GAME = dino
 
 RUN_ARGS = \
-	--imageframe-output tcp://127.0.0.1:8765 \
-	--soundframe-output tcp://127.0.0.1:8766 \
-	--cmd-input tcp://127.0.0.1:8767 \
- 	--resolution 480x320 \
+	--imageframe-output ipc://./images.ipc \
+	--soundframe-output ipc://./sounds.ipc \
+	--cmd-input ipc://./cmds.ipc \
+	--resolution 480x320 \
 	--fps 23 \
 	--keyframe-interval 48 \
 	--game $(GAME)

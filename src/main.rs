@@ -53,9 +53,9 @@ fn extract_properties_from_args(args: &Vec<String>) -> GameProperties {
     props.resolution = Resolution::from_size(480, 320);
     props.fps = 30;
     props.keyframe_interval = 12;
-    props.imageframe_output = String::from("tcp://127.0.0.1:8765");
-    props.soundframe_output = String::from("tcp://127.0.0.1:8766");
-    props.cmd_input = String::from("tcp://127.0.0.1:8767");
+    props.imageframe_output = String::from("ipc://./images.ipc");
+    props.soundframe_output = String::from("ipc://./sounds.ipc");
+    props.cmd_input = String::from("ipc://./cmds.ipc");
 
     for (i, arg) in args.iter().map(|s| s.as_str()).enumerate() {
         let next_arg = || { args[i+1].clone() };

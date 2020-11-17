@@ -19,15 +19,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "atoi"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0afb7287b68575f5ca0e5c7e40191cbd4be59d325781f46faa603e176eaef47"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -255,7 +246,6 @@ checksum = "8f5f3913fa0bfe7ee1fd8248b6b9f42a5af4b9d65ec2dd2c3c26132b950ecfc2"
 name = "gipan"
 version = "0.1.0"
 dependencies = [
- "atoi",
  "crossbeam-channel",
  "libemu",
  "libenc",
