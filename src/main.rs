@@ -3,7 +3,7 @@ extern crate libemu;
 extern crate serde;
 
 use std::io::{Read, Write};
-use std::{env, thread, str};
+use std::{env, thread, str, process};
 
 use nanomsg::{Socket, Protocol};
 use crossbeam_channel as channel;
@@ -190,7 +190,7 @@ fn run_sound_handler(
 // 'key'
 //   - args[0]: string of key input (ex, 053d) 
 // 'ctrl'
-//   - args[0]: string for stream control (ex, pause / resume)
+//   - args[0]: string for stream control (ex, pause / resume / shutdown)
 #[derive(Deserialize, Debug)]
 struct Command {
   cmd: String,
@@ -222,6 +222,7 @@ fn run_cmd_handler(
             match &ctrl_val[..] {
                 "pause" => emu.pause(),
                 "resume" => emu.resume(),
+                "shutdown" => process::exit(0),
                 _ => println!("ctrl val: {}", &args[0]),
             }
         };
