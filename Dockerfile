@@ -30,21 +30,28 @@ RUN cargo build --release
 FROM debian:buster
 
 RUN apt-get update -y && \
-  apt-get install -y libx264-dev libvpx-dev libopus-dev nanomsg-utils && \
-  ln -s libnanomsg.so.5 /usr/lib/x86_64-linux-gnu/libnanomsg.so && \
-	apt-get install -y libsdl2-dev qt5-default
+  apt-get install -y \
+    ca-certificates \
+    libsdl2-dev \
+    qt5-default \
+    libx264-dev \
+    libvpx-dev \
+    libopus-dev \
+    nanomsg-utils && \
+  ln -s libnanomsg.so.5 /usr/lib/x86_64-linux-gnu/libnanomsg.so
 
 ENV APP_HOME /home/app
 WORKDIR $APP_HOME
 
 COPY --from=builder $APP_HOME/target/release/gipan $APP_HOME/
 COPY --from=builder $APP_HOME/mame/libmame64.so $APP_HOME/mame/
+
 COPY docker-entry.sh $APP_HOME/
 ADD configs $APP_HOME/configs
 ADD bgfx $APP_HOME/bgfx
 ADD cfg $APP_HOME/cfg
-ADD nvram $APP_HOME/nvram
-ADD roms $APP_HOME/roms
+RUN mkdir $APP_HOME/nvram
+RUN mkdir $APP_HOME/roms
 
 ENV SERVICE_ACCOUNT $APP_HOME/configs/oraksil-prod-sa.json
 
