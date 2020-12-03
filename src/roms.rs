@@ -31,7 +31,7 @@ fn download_url_to_path(url: &str, path: &Path) {
 }
 
 impl GcpRomManager {
-    fn download_urls(&self, objects: &Vec<Object>) {
+    fn download_objects(&self, objects: &Vec<Object>) {
         let join_handles: Vec<std::thread::JoinHandle<_>> = objects.into_iter()
             .map(|o| { 
                 println!("downloading... {}", o.name);
@@ -57,7 +57,7 @@ impl RomManager for GcpRomManager {
             .filter(|r| r.name != prefix)
             .collect();
             
-        self.download_urls(&filtered);
+        self.download_objects(&filtered);
         println!("download done..");
         Ok(())
     }
