@@ -1,17 +1,16 @@
-extern crate libemu;
-
-extern crate serde;
+mod roms;
 
 use std::io::{Read, Write};
 use std::{env, thread, str, process};
 
 use nanomsg::{Socket, Protocol};
 use crossbeam_channel as channel;
+use serde::{Deserialize};
 
 use libemu::Emulator;
 use libenc::Encoder;
 
-use serde::{Deserialize};
+use crate::roms::RomManager;
 
 const CHANNEL_BUF_SIZE: usize = 64;
 
@@ -249,6 +248,9 @@ fn run_cmd_handler(
 fn main() {
     let args: Vec<String> = env::args().collect();
     let props = extract_properties_from_args(&args);
+
+    let rom_manager = roms::GcpRomManager::create("./roms");
+    rom_manager.pull_roms("mame", &props.system_name).unwrap();
 
     let mut emu = libemu::MameEmulator::create(
         props.resolution.w,
