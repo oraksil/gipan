@@ -1,3 +1,4 @@
+use std::env;
 use std::path::Path;
 use std::fs::File;
 use std::io::Write;
@@ -5,9 +6,94 @@ use std::thread;
 
 use reqwest;
 use cloud_storage::Object;
+use rusoto_core::Region;
+use rusoto_core::credential::AwsCredentials;
+use rusoto_s3::{S3, S3Client, ListObjectsRequest, GetObjectRequest};
+use rusoto_s3::util::{PreSignedRequest, PreSignedRequestOption};
+use tokio::runtime::Runtime;
 
 pub trait RomManager {
-    fn pull_roms(&self, emu_type: &str, system_name: &str) -> Result<(), String>;
+    fn pull_roms(&mut self, emu_type: &str, system_name: &str) -> Result<(), String>;
+}
+
+pub struct AwsRomManager {
+    base_roms_path: String,
+    creds: AwsCredentials,
+    region: Region,
+    bucket: String,
+    s3_client: S3Client,
+    runtime: Runtime
+}
+
+impl AwsRomManager {
+    pub fn create(roms_path: &str) -> impl RomManager {
+        let region = Region::ApNortheast2;
+        AwsRomManager {
+            base_roms_path: String::from(roms_path),
+            creds: AwsCredentials::new(
+                env::var("AWS_ACCESS_KEY_ID").unwrap(),
+                env::var("AWS_SECRET_ACCESS_KEY").unwrap(),
+                None,
+                None
+            ),
+            region: region.to_owned(),
+            bucket: "oraksil".to_owned(),
+            s3_client: S3Client::new(region.to_owned()),
+            runtime: Runtime::new().unwrap()
+        }
+    }
+
+    fn generate_presigned_url(&self, obj_key: &str) -> String {
+        let req = GetObjectRequest {
+            bucket: self.bucket.to_owned(),
+            key: obj_key.to_owned(),
+            ..Default::default()
+        };
+        req.get_presigned_url(&self.region, &self.creds, &PreSignedRequestOption::default())
+    }
+
+    fn download_objects(&self, obj_keys: &Vec<String>) {
+        let join_handles: Vec<std::thread::JoinHandle<_>> = obj_keys.into_iter()
+            .map(|k| { 
+                let filename = Path::new(&k).file_name().unwrap();
+                println!("downloading... {:?}", filename);
+
+                let url = self.generate_presigned_url(&k);
+                let path = Path::new(&self.base_roms_path).join(filename);
+                thread::spawn(move || gcp_download_url_to_path(&url, &path))
+            })
+            .collect();
+
+        for h in join_handles {
+            let _ = h.join();
+        }
+    }
+
+    fn list_rom_objects(&mut self, emu_type: &str, system_name: &str) -> Vec<String> {
+        let req = ListObjectsRequest {
+            bucket: self.bucket.to_owned(),
+            prefix: Some(format!("games/{}/{}", emu_type, system_name)),
+            ..Default::default()
+        };
+
+        self.runtime.block_on(self.s3_client.list_objects(req)).unwrap()
+            .contents.unwrap()
+            .into_iter()
+            .map(|o| o.key.unwrap())
+            .collect()
+    }
+}
+
+impl RomManager for AwsRomManager {
+    fn pull_roms(&mut self, emu_type: &str, system_name: &str) -> Result<(), String> {
+        let rom_objects = self.list_rom_objects(&emu_type, &system_name);
+            
+        self.download_objects(&rom_objects);
+
+        println!("download done..");
+
+        Ok(())
+    }
 }
 
 pub struct GcpRomManager {
@@ -56,7 +142,7 @@ fn gcp_download_url_to_path(url: &str, path: &Path) {
 }
 
 impl RomManager for GcpRomManager {
-    fn pull_roms(&self, emu_type: &str, system_name: &str) -> Result<(), String> {
+    fn pull_roms(&mut self, emu_type: &str, system_name: &str) -> Result<(), String> {
         let rom_objects = self.list_rom_objects(&emu_type, &system_name);
             
         self.download_objects(&rom_objects);

@@ -1,6 +1,6 @@
 FROM rust:1.45 as builder
 
-ENV APP_HOME /home/app
+ENV APP_HOME=/home/app
 RUN mkdir -p $APP_HOME
 WORKDIR $APP_HOME
 
@@ -40,7 +40,7 @@ RUN apt-get update -y && \
     nanomsg-utils && \
   ln -s libnanomsg.so.5 /usr/lib/x86_64-linux-gnu/libnanomsg.so
 
-ENV APP_HOME /home/app
+ENV APP_HOME=/home/app
 WORKDIR $APP_HOME
 
 COPY --from=builder $APP_HOME/target/release/gipan $APP_HOME/
@@ -53,6 +53,8 @@ ADD cfg $APP_HOME/cfg
 RUN mkdir $APP_HOME/nvram
 RUN mkdir $APP_HOME/roms
 
-ENV SERVICE_ACCOUNT $APP_HOME/configs/oraksil-prod-sa.json
+ENV SERVICE_ACCOUNT=$APP_HOME/configs/oraksil-prod-sa.json
+ENV AWS_ACCESS_KEY_ID=AKIAUOFLGBLY77JCAJUD
+ENV AWS_SECRET_ACCESS_KEY=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
 
 CMD ["./docker-entry.sh"]
