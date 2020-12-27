@@ -5,8 +5,9 @@ use std::thread;
 
 use reqwest;
 use cloud_storage::Object;
-use s3::creds::Credentials;
-use s3::bucket::Bucket;
+use rusoto_core::Region;
+use rusoto_s3::{S3, S3Client, ListObjectsRequest, ListObjectsV2Request};
+use tokio::runtime::Runtime;
 
 pub trait RomManager {
     fn pull_roms(&self, emu_type: &str, system_name: &str) -> Result<(), String>;
@@ -21,14 +22,6 @@ impl AwsRomManager {
         AwsRomManager {
             base_roms_path: String::from(roms_path)
         }
-    }
-
-    fn credentials(&self) -> Credentials {
-        Credentials::from_env_specific(
-                Some("AWS_ACCESS_KEY_ID"),
-                Some("AWS_SECRET_ACCESS_KEY"),
-                None,
-                None).unwrap()
     }
 
     fn download_objects(&self, objects: &Vec<String>) {
@@ -52,22 +45,15 @@ impl AwsRomManager {
     }
 
     fn list_rom_objects(&self, emu_type: &str, system_name: &str) -> Vec<String> {
-        // let client = S3Client::new(Region::ApNortheast2);
-        // let mut list_request = ListObjectsRequest::default();
-        // list_request.bucket = "oraksil".to_string();
-        // list_request.prefix = Some(format!("/games/{}/{}", emu_type, system_name));
+        let client = S3Client::new(Region::ApNortheast2);
+        let mut req = ListObjectsRequest::default();
+        req.bucket = "oraksil".to_string();
+        req.prefix = Some("/".to_string()); // Some(format!("/games/{}/{}", emu_type, system_name));
 
-        // let result = client.list_objects_v2(list_request)
-        // println!("result is {:?}", result);
+        let mut rt = Runtime::new().unwrap();
+        let result = rt.block_on(client.list_objects(req));
 
-
-        let region = "ap-northeast-2".parse().unwrap();
-        let bucket = Bucket::new("oraksil", region, self.credentials()).unwrap();
-        let prefix = format!("/games/{}/{}/", emu_type, system_name);
-        let results = bucket.list_blocking(prefix, None).unwrap();
-        for (l, c) in results {
-            println!("{:?}", l)
-        }
+        println!("result is {:?}", result);
 
         vec!()
     }

@@ -14,7 +14,9 @@ nanomsg = "0.7.2"
 crossbeam-channel = "0.4"
 reqwest = { version = "0.10", features = ["blocking", "json"] }
 cloud-storage = "0.4"
-rust-s3 = "0.26.3"
+tokio = { version = "0.2", features = ["rt-core"] }
+rusoto_core = "0.45"
+rusoto_s3 = "0.45"
 
 libemu = { path = "libemu" }
 libenc = { path = "libenc" }
