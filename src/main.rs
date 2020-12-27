@@ -249,7 +249,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let props = extract_properties_from_args(&args);
 
-    let rom_manager = roms::GcpRomManager::create("./roms");
+    let rom_manager = roms::AwsRomManager::create("./roms");
     rom_manager.pull_roms("mame", &props.system_name).unwrap();
 
     let mut emu = libemu::MameEmulator::create(
