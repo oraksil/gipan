@@ -76,11 +76,14 @@ impl AwsRomManager {
             ..Default::default()
         };
 
-        self.runtime.block_on(self.s3_client.list_objects(req)).unwrap()
-            .contents.unwrap()
-            .into_iter()
-            .map(|o| o.key.unwrap())
-            .collect()
+        match self.runtime.block_on(self.s3_client.list_objects(req)) {
+            Ok(output) => output.contents.unwrap_or(vec!())
+                .into_iter()
+                .map(|o| o.key.unwrap())
+                .collect(),
+
+            Err(_) => vec!(),
+        }
     }
 }
 
