@@ -53,8 +53,4 @@ ADD cfg $APP_HOME/cfg
 RUN mkdir $APP_HOME/nvram
 RUN mkdir $APP_HOME/roms
 
-ENV SERVICE_ACCOUNT=$APP_HOME/configs/oraksil-prod-sa.json
-ENV AWS_ACCESS_KEY_ID=AKIAUOFLGBLY77JCAJUD
-ENV AWS_SECRET_ACCESS_KEY=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
-
 CMD ["./docker-entry.sh"]
