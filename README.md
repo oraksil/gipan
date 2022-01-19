@@ -1,31 +1,18 @@
-# gipan
-Oraksil Gipan
+# Gipan
 
-## Lib
-### Generate C Bindings from Headers (Manually)
-There're too many options when using `bindgen`. Need to deep dive sometime. For now, we need `-x c++` for `bindgen` to understand c++ standard headers or syntax.
-```
-$ cd libemu
-$ bindgen libemu/include/headless.h -o libemu/src/bindings.rs -- -x c++
-```
+`Gipan` means a (green) main board in the game console box. It integrates MAME emulator as a game engine, encodes video/audio frames MAME renders and provides IPC or TCP channels for Orakki to fetch the encoded data. (It's the same for player control data) It's built with Rust.
 
-### Build
-To build `libmame` as standalone, use following command. But, we don't need to build this everytime in development cycle since an app will build all dependencies that it depends by path.
-```
-$ cd libemu
-$ cargo build --release
-```
 
-## App (ctrl)
-### Prerequisite
-#### Nanomsg lib
+# Prerequisite
+
+## Nanomsg 
 Gipan needs Nanomsg so that it delivers image frames and takes keyboard events with orakki.
 
 For more details about Nanomsg,
 https://github.com/nanomsg/nanomsg
 https://bravenewgeek.com/a-look-at-nanomsg-and-scalability-protocols/
 
-```
+```bash
 $ git clone https://github.com/nanomsg/nanomsg.git
 $ mkdir -p nanomsg/build
 $ cd nanomsg/build
@@ -35,30 +22,49 @@ $ ctest .
 $ sudo cmake --build . --target install
 ```
 
-#### libvpx
+## Codecs
 
-```
+```bash
+# For Linux
+$ apt-get install -y \
+    libvpx-dev \
+    libopus-dev
+
+# For MacOS
 $ brew install libvpx
 $ brew install libopusenc
 ```
 
-### Build
-```
-$ cd ctrl
+## Game Roms
+
+You should get your own MAME game roms due to some license issues. Place the roms under `./roms`.
+
+# Build & Run
+
+## Build
+```bash
 $ cargo build
 
-# or for release
+# For release
 $ cargo build --release
+
+# If using Makefile
+$ make build_dbg
+$ make build_rel
 ```
 
-### Run
-```
+## Run
+```bash
 $ DYLD_LIBRARY_PATH=../mame RUST_BACKTRACE=1 cargo run -- \
-    --imageframe-output ipc://./imageframes.ipc \
-    --soundframe-output ipc://./soundframes.ipc \
-    --key-input ipc://./keys.ipc \
-    --resolution 640x480 \
-    --fps 30 \
-    --keyframe-interval 12 \
+    --imageframe-output ipc://./images.ipc \
+    --soundframe-output ipc://./sounds.ipc \
+    --cmd-input ipc://./cmds.ipc \
+    --resolution 480x320 \
+    --fps 23 \
+    --keyframe-interval 48 \
     --game dino
+
+# Or with Makefile
+$ make run_dbg
+$ make run_rel
 ```

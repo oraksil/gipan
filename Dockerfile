@@ -47,7 +47,6 @@ COPY --from=builder $APP_HOME/target/release/gipan $APP_HOME/
 COPY --from=builder $APP_HOME/mame/libmame64.so $APP_HOME/mame/
 
 COPY docker-entry.sh $APP_HOME/
-ADD configs $APP_HOME/configs
 ADD bgfx $APP_HOME/bgfx
 ADD cfg $APP_HOME/cfg
 RUN mkdir $APP_HOME/nvram
